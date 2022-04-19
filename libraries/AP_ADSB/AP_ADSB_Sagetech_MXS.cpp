@@ -21,6 +21,7 @@
 #include "AP_ADSB_Sagetech_MXS.h"
 
 #if HAL_ADSB_SAGETECH_MXS_ENABLED
+#include <AP_GPS/AP_GPS.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_RTC/AP_RTC.h>
@@ -29,6 +30,8 @@
 #include <time.h>
 #include <string.h>
 #include <math.h>
+
+#define ADSB_COM_TX_BUFFER_LEN 128
 
 // #define SAGETECH_SCALER_LATLNG              (1.0f/2.145767E-5f)     //   180/(2^23)
 // #define SAGETECH_SCALER_KNOTS_TO_CMS        ((KNOTS_TO_M_PER_SEC/0.125f) * 100.0f)
@@ -45,6 +48,11 @@
 // #define SAGETECH_VALIDFLAG_EST_LATLNG       (1U<<7)
 // #define SAGETECH_VALIDFLAG_EST_VELOCITY     (1U<<8)
 
+static uint8_t txComBuffer[ADSB_COM_TX_BUFFER_LEN];
+static uint8_t msgId = 0;
+static AP_GPS ap_gps;
+
+
 // detect if any port is configured as Sagetech
 bool AP_ADSB_Sagetech_MXS::detect()
 {
@@ -58,7 +66,17 @@ bool AP_ADSB_Sagetech_MXS::init()
     return (_port != nullptr);
 }
 
-// Periodic 10Hz callback
+/**
+ * @brief A periodic callback function (Called with freq of 10Hz) that sends 
+ * appropriate message types at specific times.
+ * 
+ * Serial Port Buffer (10Hz)
+ * Send installation message (every 5 seconds)
+ * Send Flight ID (every 8.2 s)
+ * Send Operating Message (every second)
+ * Send GPS data (flying: 5Hz, not flying: 1Hz)
+ * 
+ */
 void AP_ADSB_Sagetech_MXS::update()
 {
     if (_port == nullptr) {
@@ -114,24 +132,30 @@ void AP_ADSB_Sagetech_MXS::update()
     }
 }
 
+/**
+ * @brief Takes the message type provided and calls the correct
+ * callback function to send the correct message type
+ * 
+ * @param type : MsgType to send.
+ */
 void AP_ADSB_Sagetech_MXS::send_packet(const MsgType type)
 {
-    // switch (type) {
-    // case MsgType::Installation:
-    //     send_msg_Installation();
-    //     break;
-    // case MsgType::FlightID:
-    //     send_msg_PreFlight();
-    //     break;
-    // case MsgType::Operating:
-    //     send_msg_Operating();
-    //     break;
-    // case MsgType::GPS_Data:
-    //     send_msg_GPS();
-    //     break;
-    // default:
-    //     break;
-    // }
+    switch (type) {
+    case MsgType::Installation:
+        send_msg_Installation();
+        break;
+    case MsgType::FlightID:
+        send_msg_PreFlight();
+        break;
+    case MsgType::Operating:
+        send_msg_Operating();
+        break;
+    case MsgType::GPS_Data:
+        send_msg_GPS();
+        break;
+    default:
+        break;
+    }
 }
 
 void AP_ADSB_Sagetech_MXS::request_packet(const MsgType type)
@@ -139,7 +163,7 @@ void AP_ADSB_Sagetech_MXS::request_packet(const MsgType type)
     // // set all bytes in packet to 0 via {} so we only need to set the ones we need to
     // Packet pkt {};
 
-    // pkt.type = MsgType::Request;
+    // pkt.type = MsgType::Data_Request;
     // pkt.id = 0;
     // pkt.payload_length = 4;
 
@@ -149,8 +173,15 @@ void AP_ADSB_Sagetech_MXS::request_packet(const MsgType type)
 }
 
 
+/**
+ * @brief Takes incoming packets, gets their message type, and 
+ * appropriately handles them with the correct callbacks.
+ * 
+ * @param msg Message packet received, cast into Packet type.
+ */
 void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
 {
+    // TODO: Populate with correct callbacks to handle incoming messages
     switch (msg.type) {
     case MsgType::ACK:
         {
@@ -195,13 +226,18 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
     case MsgType::TISB_ADSB_Mgr_Report:
     case MsgType::ADSB_Target_State_Report:
     case MsgType::ADSB_Air_Ref_Vel_Report:
-        // TODO
         handle_adsb_in_msg(msg);
         break;
 
     }
 }
 
+
+/**
+ * @brief Received ADSB-in message callback function.
+ * 
+ * @param msg Received packet.
+ */
 void AP_ADSB_Sagetech_MXS::handle_adsb_in_msg(const Packet &msg)
 {
     // AP_ADSB::adsb_vehicle_t vehicle {};
@@ -209,7 +245,7 @@ void AP_ADSB_Sagetech_MXS::handle_adsb_in_msg(const Packet &msg)
     // vehicle.last_update_ms = AP_HAL::millis();
 
     // switch (msg.type) {
-    // case MsgType_XP::ADSB_StateVector_Report: { // 0x91
+    // case MsgType::ADSB_StateVector_Report: { // 0x91
     //     const uint16_t validFlags = le16toh_ptr(&msg.payload[8]);
     //     vehicle.info.ICAO_address = le24toh_ptr(&msg.payload[10]);
 
@@ -244,7 +280,7 @@ void AP_ADSB_Sagetech_MXS::handle_adsb_in_msg(const Packet &msg)
     //     _frontend.handle_adsb_vehicle(vehicle);
     //     break;
     // }
-    // case MsgType_XP::ADSB_ModeStatus_Report:   // 0x92
+    // case MsgType::ADSB_ModeStatus_Report:   // 0x92
     //     vehicle.info.ICAO_address = le24toh_ptr(&msg.payload[9]);
 
     //     if (msg.payload[16] != 0) {
@@ -255,10 +291,10 @@ void AP_ADSB_Sagetech_MXS::handle_adsb_in_msg(const Packet &msg)
 
     //     _frontend.handle_adsb_vehicle(vehicle);
     //     break;
-    // case MsgType_XP::TISB_StateVector_Report:
-    // case MsgType_XP::TISB_ModeStatus_Report:
-    // case MsgType_XP::TISB_CorasePos_Report:
-    // case MsgType_XP::TISB_ADSB_Mgr_Report:
+    // case MsgType::TISB_StateVector_Report:
+    // case MsgType::TISB_ModeStatus_Report:
+    // case MsgType::TISB_CorasePos_Report:
+    // case MsgType::TISB_ADSB_Mgr_Report:
     //     // TODO
     //     return;
 
@@ -268,8 +304,14 @@ void AP_ADSB_Sagetech_MXS::handle_adsb_in_msg(const Packet &msg)
 
 }
 
-// handling inbound byte and process it in the state machine
-// return true when a full packet has been received
+/**
+ * @brief Handles an incoming byte and processes it through the state
+ * machine to determine if end of message is reached.
+ * 
+ * @param data : incoming byte
+ * @return true : if a full packet has been received
+ * @return false : if not yet reached packet termination
+ */
 bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
 {
     switch (message_in.state) {
@@ -320,30 +362,49 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
 }
 
 // send message to serial port
+//FIXME: Deprecated send_msg function. Preamble and checksum handled in sdk encode
+// functions.
 void AP_ADSB_Sagetech_MXS::send_msg(Packet &msg)
 {
-    const uint8_t message_format_header[5] {
-            START_BYTE,
-            static_cast<uint8_t>(msg.type),
-            msg.id,
-            msg.payload_length,
-    };
+    // const uint8_t message_format_header[5] {
+    //         START_BYTE,
+    //         static_cast<uint8_t>(msg.type),
+    //         msg.id,
+    //         msg.payload_length,
+    // };
 
-    uint8_t checksum = 0;
-    for (uint16_t i=0; i<ARRAY_SIZE(message_format_header); i++) {
-        checksum += message_format_header[i];
-    }
-    for (uint16_t i=0; i<msg.payload_length; i++) {
-        checksum += msg.payload[i];
-    }
+    // uint8_t checksum = 0;
+    // for (uint16_t i=0; i<ARRAY_SIZE(message_format_header); i++) {
+    //     checksum += message_format_header[i];
+    // }
+    // for (uint16_t i=0; i<msg.payload_length; i++) {
+    //     checksum += msg.payload[i];
+    // }
 
+    // if (_port != nullptr) {
+    //     _port->write(message_format_header, sizeof(message_format_header));
+    //     _port->write(msg.payload, msg.payload_length);
+    //     _port->write(checksum);
+    // }
+}
+
+/**
+ * @brief Takes a raw buffer and writes it out to the device port.
+ * 
+ * @param data : pointer to data buffer
+ * @param len : number of bytes to write
+ */
+void AP_ADSB_Sagetech_MXS::msgWrite(uint8_t *data, uint16_t len)
+{
     if (_port != nullptr) {
-        _port->write(message_format_header, sizeof(message_format_header));
-        _port->write(msg.payload, msg.payload_length);
-        _port->write(checksum);
+        _port->write(data, len);
     }
 }
 
+/**
+ * @brief Callback for sending an installation message.
+ * 
+ */
 void AP_ADSB_Sagetech_MXS::send_msg_Installation()
 {
 //     Packet pkt {};
@@ -385,8 +446,18 @@ void AP_ADSB_Sagetech_MXS::send_msg_Installation()
 //     send_msg(pkt);
 }
 
+/**
+ * @brief Callback for sending a FlightID message
+ * 
+ */
 void AP_ADSB_Sagetech_MXS::send_msg_PreFlight()
 {
+
+    sg_flightid_t flightId;
+    strncpy(flightId.flightId, _frontend.out_state.cfg.callsign, 9);    // 9 is the callsign length
+    sgEncodeFlightId(txComBuffer, &flightId, msgId++);
+    msgWrite(txComBuffer, sizeof(sg_flightid_t));
+
     // Packet pkt {};
 
     // pkt.type = MsgType::FlightID;
@@ -400,8 +471,40 @@ void AP_ADSB_Sagetech_MXS::send_msg_PreFlight()
     // send_msg(pkt);
 }
 
+/**
+ * @brief Callback for sending an operating message.
+ * 
+ */
 void AP_ADSB_Sagetech_MXS::send_msg_Operating()
 {
+    // Declare Operating Message Type
+    sg_operating_t op;
+
+    // Populate operating message structure
+    op.squawk = convert_base_to_decimal(8, last_operating_squawk);
+    op.opMode = (sg_op_mode_t) modeOff;     // FIXME: Figure out how to update/get the OpMode
+                                            // Is this rfSelect/last_operating_rf_select?
+    op.savePowerUp = true;      // Save power-up state in non-volatile
+    op.enableSqt = false;       // Enable extended squitters
+    op.enableXBit = false;      // Enable the x-bit
+    op.milEmergency = false;    // Broadcast a military emergency
+    op.emergcType = (sg_emergc_t) emergcNone; // Enumerated civilian emergency type
+
+    op.altUseIntrnl = true;     // True = Report altitude from internal pressure sensor
+                                // (will ignore other bits in the field)
+    // we are using internal, so these don't need to be set
+    op.altHostAvlbl = false;    // Host Altitude is being provided
+    op.altRes25 = false;        // Host Altitude Resolution from install
+    op.altitude = 0;            // Sea-level altitude in feet. Field is ignored when internal altitude is selected
+
+    op.climbValid = false;      // Climb rate is provided (LUA script AHRS does not provide climb rate)
+    op.climbRate = 0;           // Climb rate in ft/min. Limits are +/- 16,448 ft/min.
+    // FIXME: Add heading and airspeed data
+
+    // Encode the operating message object
+    sgEncodeOperating(txComBuffer, &op, msgId++);
+    msgWrite(txComBuffer, sizeof(sg_operating_t));
+
     // Packet pkt {};
 
     // pkt.type = MsgType::Operating;
@@ -432,8 +535,63 @@ void AP_ADSB_Sagetech_MXS::send_msg_Operating()
     // send_msg(pkt);
 }
 
+/**
+ * @brief Callback for sending a GPS data message
+ * 
+ */
 void AP_ADSB_Sagetech_MXS::send_msg_GPS()
 {
+    sg_gps_t gps;
+
+    // Populate the GPS object
+    // Realistic but arbitrary RAIM values
+    gps.hpl = 12.0;
+    gps.hfom = 23.0;
+    gps.vfom = 33.0;
+    gps.nacv = (sg_nacv_t) nacv3dot0;
+
+    // Get Vehicle Longitude and Lattidue and Convert to string
+    const int32_t longitude = _frontend._my_loc.lng;
+    const int32_t latitude =  _frontend._my_loc.lat;
+    const double lon_deg = longitude * (double)1.0e-7 * (longitude < 0 ? -1 : 1);
+    const double lon_minutes = (lon_deg - int(lon_deg)) * 60;
+    snprintf((char*)&gps.longitude, 12, "%03u%02u.%05u", (unsigned)lon_deg, (unsigned)lon_minutes, unsigned((lon_minutes - (int)lon_minutes) * 1.0E5));
+
+    const double lat_deg = latitude * (double)1.0e-7 * (latitude < 0 ? -1 : 1);
+    const double lat_minutes = (lat_deg - int(lat_deg)) * 60;
+    snprintf((char*)&gps.latitude, 11, "%02u%02u.%05u", (unsigned)lat_deg, (unsigned)lat_minutes, unsigned((lat_minutes - (int)lat_minutes) * 1.0E5));
+
+    // ground speed
+    const Vector2f speed = AP::ahrs().groundspeed_vector();
+    float speed_knots = speed.length() * M_PER_SEC_TO_KNOTS;
+    snprintf((char*)&gps.grdSpeed, 7, "%03u.%02u", (unsigned)speed_knots, unsigned((speed_knots - (int)speed_knots) * 1.0E2));
+
+    // heading
+    float heading = wrap_360(degrees(speed.angle()));
+    snprintf((char*)&gps.grdTrack, 9, "%03u.%04u", unsigned(heading), unsigned((heading - (int)heading) * 1.0E4));
+
+    gps.latNorth = (latitude >= 0 ? true: false);
+    gps.lngEast = (longitude >= 0 ? true: false);
+
+    gps.gpsValid = (AP::gps().status() < AP_GPS::GPS_OK_FIX_2D) ? false : true;  // If the status is not OK, gpsValid is false.
+
+    uint64_t time_usec;
+    if (AP::rtc().get_utc_usec(time_usec)) {
+        // not completely accurate, our time includes leap seconds and time_t should be without
+        const time_t time_sec = time_usec / 1000000;
+        struct tm* tm = gmtime(&time_sec);
+
+        // format time string
+        snprintf((char*)&gps.timeOfFix, 11, "%02u%02u%06.3f", tm->tm_hour, tm->tm_min, tm->tm_sec + (time_usec % 1000000) * 1.0e-6);
+    } else {
+        memset(&gps.timeOfFix,' ', 10);
+    }
+
+    // Encode GPS and Send It
+    sgEncodeGPS(txComBuffer, &gps, msgId++);
+    msgWrite(txComBuffer, sizeof(sg_gps_t));
+
+
     // Packet pkt {};
 
     // pkt.type = MsgType::GPS_Data;
@@ -484,6 +642,7 @@ void AP_ADSB_Sagetech_MXS::send_msg_GPS()
 
     // send_msg(pkt);
 }
+
 
 /*
  * Convert base 8 or 16 to decimal. Used to convert an octal/hexadecimal value stored on a GCS as a string field in different format, but then transmitted over mavlink as a float which is always a decimal.

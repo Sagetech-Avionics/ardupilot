@@ -25,6 +25,8 @@
 #define HAL_ADSB_SAGETECH_MXS_ENABLED HAL_ADSB_ENABLED
 #endif
 
+#include "sagetech-sdk/sdk/sg.h"
+
 #if HAL_ADSB_SAGETECH_MXS_ENABLED
 class AP_ADSB_Sagetech_MXS : public AP_ADSB_Backend {
 public:
@@ -132,6 +134,9 @@ private:
     // stored on a GCS as a string field in different format, but then transmitted
     // over mavlink as a float which is always a decimal.
     uint32_t convert_base_to_decimal(const uint8_t baseIn, uint32_t inputNumber);
+
+    void msgWrite(uint8_t *data, uint16_t len);
+
 
     // timers for each out-bound packet
     uint32_t        last_packet_initialize_ms;
