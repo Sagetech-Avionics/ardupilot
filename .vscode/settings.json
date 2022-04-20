@@ -12,6 +12,9 @@
         "ratio": "cpp",
         "tuple": "cpp",
         "utility": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "cctype": "c",
+        "sgutil.h": "c",
+        "*.tcc": "c"
     }
 }

@@ -31,6 +31,10 @@
 #include <string.h>
 #include <math.h>
 
+extern "C" {
+#include <AP_ADSB/sagetech-sdk/sg.h>
+}
+
 #define ADSB_COM_TX_BUFFER_LEN 128
 
 // #define SAGETECH_SCALER_LATLNG              (1.0f/2.145767E-5f)     //   180/(2^23)

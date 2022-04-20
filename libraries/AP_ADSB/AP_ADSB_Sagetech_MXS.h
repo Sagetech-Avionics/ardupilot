@@ -25,7 +25,6 @@
 #define HAL_ADSB_SAGETECH_MXS_ENABLED HAL_ADSB_ENABLED
 #endif
 
-#include "sagetech-sdk/sdk/sg.h"
 
 #if HAL_ADSB_SAGETECH_MXS_ENABLED
 class AP_ADSB_Sagetech_MXS : public AP_ADSB_Backend {
