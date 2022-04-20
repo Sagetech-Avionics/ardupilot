@@ -23,10 +23,7 @@
 
 #include <stdio.h>
 #include <sys/stat.h>
-#define USE_PICOJSON (CONFIG_HAL_BOARD == HAL_BOARD_SITL)
-#if USE_PICOJSON
-#include "picojson.h"
-#endif
+
 
 using namespace SITL;
 
@@ -379,11 +376,19 @@ void Frame::load_frame_params(const char *model_json)
         exit(1);
     }
 
-    struct {
+    enum JSON_TYPE {
+        JSON_FLOAT,
+        JSON_VECTOR3F,
+    };
+
+    struct json_search {
         const char *label;
-        float &v;
-    } vars[] = {
-#define FRAME_VAR(s) { #s, model.s }
+        void *ptr;
+        JSON_TYPE t;
+    };
+    
+    json_search vars[] = {
+#define FRAME_VAR(s) { #s, &model.s, JSON_TYPE::JSON_FLOAT }
         FRAME_VAR(mass),
         FRAME_VAR(diagonal_size),
         FRAME_VAR(refSpd),
@@ -405,8 +410,8 @@ void Frame::load_frame_params(const char *model_json)
         FRAME_VAR(slew_max),
         FRAME_VAR(disc_area),
         FRAME_VAR(mdrag_coef),
+        {"moment_inertia", &model.moment_of_inertia, JSON_TYPE::JSON_VECTOR3F},
     };
-    static_assert(sizeof(model) == sizeof(float)*ARRAY_SIZE(vars), "incorrect model vars");
 
     for (uint8_t i=0; i<ARRAY_SIZE(vars); i++) {
         auto v = obj.get(vars[i].label);
@@ -414,14 +419,53 @@ void Frame::load_frame_params(const char *model_json)
             // use default value
             continue;
         }
-        if (!v.is<double>()) {
-            AP_HAL::panic("Bad json type for %s: %s", vars[i].label, v.to_str().c_str());
+        if (vars[i].t == JSON_TYPE::JSON_FLOAT) {
+            parse_float(v, vars[i].label, *((float *)vars[i].ptr));
+
+        } else if (vars[i].t == JSON_TYPE::JSON_VECTOR3F) {
+            parse_vector3(v, vars[i].label, *(Vector3f *)vars[i].ptr);
+
         }
-        vars[i].v = v.get<double>();
+    }
+
+    json_search per_motor_vars[] = {
+        {"position", &model.motor_pos, JSON_TYPE::JSON_VECTOR3F},
+        {"vector", &model.motor_thrust_vec, JSON_TYPE::JSON_VECTOR3F},
+    };
+    char label_name[20];
+    for (uint8_t i=0; i<ARRAY_SIZE(per_motor_vars); i++) {
+        for (uint8_t j=0; j<12; j++) {
+            sprintf(label_name, "motor%i_%s", j+1, per_motor_vars[i].label);
+            auto v = obj.get(label_name);
+            if (v.is<picojson::null>()) {
+                // use default value
+                continue;
+            }
+            if (per_motor_vars[i].t == JSON_TYPE::JSON_VECTOR3F) {
+                parse_vector3(v, label_name, *(((Vector3f *)per_motor_vars[i].ptr) + j));
+            }
+        }
     }
 
     ::printf("Loaded model params from %s\n", model_json);
 }
+
+void Frame::parse_float(picojson::value val, const char* label, float &param) {
+    if (!val.is<double>()) {
+        AP_HAL::panic("Bad json type for %s: %s", label, val.to_str().c_str());
+    }
+    param = val.get<double>();
+}
+
+void Frame::parse_vector3(picojson::value val, const char* label, Vector3f &param) {
+    if (!val.is<picojson::array>() || !val.contains(2) || val.contains(3)) {
+        AP_HAL::panic("Bad json type for %s: %s", label, val.to_str().c_str());
+    }
+    for (uint8_t j=0; j<3; j++) {
+        parse_float(val.get(j), label, param[j]);
+    }
+}
+
 #endif
 
 /*
@@ -465,9 +509,9 @@ void Frame::init(const char *frame_str, Battery *_battery)
     float hover_power = model.refCurrent * model.refVoltage;
     float hover_velocity_out = 2 * hover_power / hover_thrust;
     float effective_disc_area = hover_thrust / (0.5 * ref_air_density * sq(hover_velocity_out));
-    velocity_max = hover_velocity_out / sqrtf(model.hoverThrOut);
+    float velocity_max = hover_velocity_out / sqrtf(model.hoverThrOut);
     thrust_max = 0.5 * ref_air_density * effective_disc_area * sq(velocity_max);
-    effective_prop_area = effective_disc_area / num_motors;
+    float effective_prop_area = effective_disc_area / num_motors;
 
     // power_factor is ratio of power consumed per newton of thrust
     float power_factor = hover_power / hover_thrust;
@@ -476,7 +520,15 @@ void Frame::init(const char *frame_str, Battery *_battery)
 
     for (uint8_t i=0; i<num_motors; i++) {
         motors[i].setup_params(model.pwmMin, model.pwmMax, model.spin_min, model.spin_max, model.propExpo, model.slew_max,
-                               model.mass, model.diagonal_size, power_factor, model.maxVoltage);
+                               model.diagonal_size, power_factor, model.maxVoltage, effective_prop_area, velocity_max,
+                               model.motor_pos[i], model.motor_thrust_vec[i]);
+    }
+
+    if (is_zero(model.moment_of_inertia.x) || is_zero(model.moment_of_inertia.y) || is_zero(model.moment_of_inertia.z)) {
+        // if no inertia provided, assume 50% of mass on ring around center
+        model.moment_of_inertia.x = model.mass * 0.25 * sq(model.diagonal_size*0.5);
+        model.moment_of_inertia.y = model.moment_of_inertia.x;
+        model.moment_of_inertia.z = model.mass * 0.5 * sq(model.diagonal_size*0.5);
     }
 
 
@@ -491,7 +543,7 @@ void Frame::init(const char *frame_str, Battery *_battery)
             Vector3f rot_accel {}, thrust {};
             Vector3f vel_air_bf {};
             motors[0].calculate_forces(input, motor_offset, rot_accel, thrust, vel_air_bf,
-                                       ref_air_density, velocity_max, effective_prop_area, battery->get_voltage());
+                                       ref_air_density, battery->get_voltage());
             ::printf("pwm[%u] cmd=%.3f thrust=%.3f hovthst=%.3f\n",
                      pwm, motors[0].pwm_to_command(pwm), -thrust.z*num_motors, hover_thrust);
         }
@@ -530,6 +582,7 @@ void Frame::calculate_forces(const Aircraft &aircraft,
                              bool use_drag)
 {
     Vector3f thrust; // newtons
+    Vector3f torque;
 
     const float air_density = get_air_density(aircraft.get_location().alt*0.01);
 
@@ -537,17 +590,21 @@ void Frame::calculate_forces(const Aircraft &aircraft,
 
     float current = 0;
     for (uint8_t i=0; i<num_motors; i++) {
-        Vector3f mraccel, mthrust;
-        motors[i].calculate_forces(input, motor_offset, mraccel, mthrust, vel_air_bf, air_density, velocity_max,
-                                   effective_prop_area, battery->get_voltage());
+        Vector3f mtorque, mthrust;
+        motors[i].calculate_forces(input, motor_offset, mtorque, mthrust, vel_air_bf, air_density, battery->get_voltage());
         current += motors[i].get_current();
-        rot_accel += mraccel;
+        torque += mtorque;
         thrust += mthrust;
         // simulate motor rpm
         if (!is_zero(AP::sitl()->vibe_motor)) {
             rpm[i] = motors[i].get_command() * AP::sitl()->vibe_motor * 60.0f;
         }
     }
+
+    // calculate total rotational acceleration
+    rot_accel.x = torque.x / model.moment_of_inertia.x;
+    rot_accel.y = torque.y / model.moment_of_inertia.y;
+    rot_accel.z = torque.z / model.moment_of_inertia.z;
 
     body_accel = thrust/aircraft.gross_mass();
 
