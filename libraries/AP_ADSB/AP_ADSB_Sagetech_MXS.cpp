@@ -365,33 +365,6 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
     return false;
 }
 
-// send message to serial port
-//FIXME: Deprecated send_msg function. Preamble and checksum handled in sdk encode
-// functions.
-void AP_ADSB_Sagetech_MXS::send_msg(Packet &msg)
-{
-    // const uint8_t message_format_header[5] {
-    //         START_BYTE,
-    //         static_cast<uint8_t>(msg.type),
-    //         msg.id,
-    //         msg.payload_length,
-    // };
-
-    // uint8_t checksum = 0;
-    // for (uint16_t i=0; i<ARRAY_SIZE(message_format_header); i++) {
-    //     checksum += message_format_header[i];
-    // }
-    // for (uint16_t i=0; i<msg.payload_length; i++) {
-    //     checksum += msg.payload[i];
-    // }
-
-    // if (_port != nullptr) {
-    //     _port->write(message_format_header, sizeof(message_format_header));
-    //     _port->write(msg.payload, msg.payload_length);
-    //     _port->write(checksum);
-    // }
-}
-
 /**
  * @brief Takes a raw buffer and writes it out to the device port.
  * 
@@ -460,19 +433,7 @@ void AP_ADSB_Sagetech_MXS::send_msg_PreFlight()
     sg_flightid_t flightId;
     strncpy(flightId.flightId, _frontend.out_state.cfg.callsign, 9);    // 9 is the callsign length
     sgEncodeFlightId(txComBuffer, &flightId, msgId++);
-    msgWrite(txComBuffer, sizeof(sg_flightid_t));
-
-    // Packet pkt {};
-
-    // pkt.type = MsgType::FlightID;
-    // pkt.id = 0;
-    // pkt.payload_length = 10;
-
-    // memcpy(&pkt.payload[0], &_frontend.out_state.cfg.callsign, 8);
-
-    // memset(&pkt.payload[8], 0, 2);
-
-    // send_msg(pkt);
+    msgWrite(txComBuffer, SG_MSG_LEN_FLIGHT);
 }
 
 /**
@@ -503,40 +464,23 @@ void AP_ADSB_Sagetech_MXS::send_msg_Operating()
 
     op.climbValid = false;      // Climb rate is provided (LUA script AHRS does not provide climb rate)
     op.climbRate = 0;           // Climb rate in ft/min. Limits are +/- 16,448 ft/min.
-    // FIXME: Add heading and airspeed data
+    
+    op.headingValid = false;
+    op.airspdValid = false;
+    const Vector2f speed = AP::ahrs().groundspeed_vector();
+    if (speed != Vector2f(0.0f, 0.0f))      // If groundspeed vector is not default values, set valid flags
+    {
+        op.headingValid = true;
+        op.airspdValid = true;
+    }
+    uint16_t speed_knots = speed.length() * M_PER_SEC_TO_KNOTS;
+    double heading = wrap_360(degrees(speed.angle()));
+    op.airspd = speed_knots;
+    op.heading = heading;
 
     // Encode the operating message object
     sgEncodeOperating(txComBuffer, &op, msgId++);
-    msgWrite(txComBuffer, sizeof(sg_operating_t));
-
-    // Packet pkt {};
-
-    // pkt.type = MsgType::Operating;
-    // pkt.id = 0;
-    // pkt.payload_length = 8;
-
-    // // squawk
-    // // param is saved as native octal so we need convert back to
-    // // decimal because Sagetech will convert it back to octal
-    // uint16_t squawk = convert_base_to_decimal(8, last_operating_squawk);
-    // put_le16_ptr(&pkt.payload[0], squawk);
-
-    // // altitude
-    // if (_frontend.out_state.cfg.rf_capable & 0x01) {
-    //     const float alt_meters = last_operating_alt * 0.01f;
-    //     const int32_t alt_feet = (int32_t)(alt_meters * FEET_TO_METERS);
-    //     const int16_t alt_feet_adj = (alt_feet + 50) / 100; // 1 = 100 feet, 1 = 149 feet, 5 = 500 feet
-    //     put_le16_ptr(&pkt.payload[2], alt_feet_adj);
-
-    // } else {
-    //     // use integrated altitude - recommend by sagetech
-    //     pkt.payload[2] = 0x80;
-    //     pkt.payload[3] = 0x00;
-    // }
-
-    // // RF mode
-    // pkt.payload[4] = last_operating_rf_select;
-    // send_msg(pkt);
+    msgWrite(txComBuffer, SG_MSG_LEN_OPMSG);
 }
 
 /**
@@ -594,57 +538,6 @@ void AP_ADSB_Sagetech_MXS::send_msg_GPS()
     // Encode GPS and Send It
     sgEncodeGPS(txComBuffer, &gps, msgId++);
     msgWrite(txComBuffer, sizeof(sg_gps_t));
-
-
-    // Packet pkt {};
-
-    // pkt.type = MsgType::GPS_Data;
-    // pkt.payload_length = 52;
-    // pkt.id = 0;
-
-    // const int32_t longitude = _frontend._my_loc.lng;
-    // const int32_t latitude =  _frontend._my_loc.lat;
-
-    // // longitude and latitude
-    // // NOTE: these MUST be done in double or else we get roundoff in the maths
-    // const double lon_deg = longitude * (double)1.0e-7 * (longitude < 0 ? -1 : 1);
-    // const double lon_minutes = (lon_deg - int(lon_deg)) * 60;
-    // snprintf((char*)&pkt.payload[0], 12, "%03u%02u.%05u", (unsigned)lon_deg, (unsigned)lon_minutes, unsigned((lon_minutes - (int)lon_minutes) * 1.0E5));
-
-    // const double lat_deg = latitude * (double)1.0e-7 * (latitude < 0 ? -1 : 1);
-    // const double lat_minutes = (lat_deg - int(lat_deg)) * 60;
-    // snprintf((char*)&pkt.payload[11], 11, "%02u%02u.%05u", (unsigned)lat_deg, (unsigned)lat_minutes, unsigned((lat_minutes - (int)lat_minutes) * 1.0E5));
-
-    // // ground speed
-    // const Vector2f speed = AP::ahrs().groundspeed_vector();
-    // float speed_knots = speed.length() * M_PER_SEC_TO_KNOTS;
-    // snprintf((char*)&pkt.payload[21], 7, "%03u.%02u", (unsigned)speed_knots, unsigned((speed_knots - (int)speed_knots) * 1.0E2));
-
-    // // heading
-    // float heading = wrap_360(degrees(speed.angle()));
-    // snprintf((char*)&pkt.payload[27], 10, "%03u.%04u", unsigned(heading), unsigned((heading - (int)heading) * 1.0E4));
-
-    // // hemisphere
-    // uint8_t hemisphere = 0;
-    // hemisphere |= (latitude >= 0) ? 0x01 : 0;   // isNorth
-    // hemisphere |= (longitude >= 0) ? 0x02 : 0;  // isEast
-    // hemisphere |= (AP::gps().status() < AP_GPS::GPS_OK_FIX_2D) ? 0x80 : 0;  // isInvalid
-    // pkt.payload[35] = hemisphere;
-
-    // // time
-    // uint64_t time_usec;
-    // if (AP::rtc().get_utc_usec(time_usec)) {
-    //     // not completely accurate, our time includes leap seconds and time_t should be without
-    //     const time_t time_sec = time_usec / 1000000;
-    //     struct tm* tm = gmtime(&time_sec);
-
-    //     // format time string
-    //     snprintf((char*)&pkt.payload[36], 11, "%02u%02u%06.3f", tm->tm_hour, tm->tm_min, tm->tm_sec + (time_usec % 1000000) * 1.0e-6);
-    // } else {
-    //     memset(&pkt.payload[36],' ', 10);
-    // }
-
-    // send_msg(pkt);
 }
 
 
