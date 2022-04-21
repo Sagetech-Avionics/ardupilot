@@ -54,8 +54,6 @@ extern "C" {
 
 static uint8_t txComBuffer[ADSB_COM_TX_BUFFER_LEN];
 static uint8_t msgId = 0;
-static AP_GPS ap_gps;
-
 
 // detect if any port is configured as Sagetech
 bool AP_ADSB_Sagetech_MXS::detect()
