@@ -31,10 +31,6 @@
 #include <string.h>
 #include <math.h>
 
-extern "C" {
-#include <AP_ADSB/sagetech-sdk/sg.h>
-}
-
 #define ADSB_COM_TX_BUFFER_LEN 128
 
 // #define SAGETECH_SCALER_LATLNG              (1.0f/2.145767E-5f)     //   180/(2^23)
@@ -382,6 +378,39 @@ void AP_ADSB_Sagetech_MXS::msgWrite(uint8_t *data, uint16_t len)
  */
 void AP_ADSB_Sagetech_MXS::send_msg_Installation()
 {
+    sg_install_t inst;
+    inst.icao = _frontend.out_state.cfg.ICAO_id;
+    memcpy(&inst.reg, &_frontend.out_state.cfg.callsign, 8);    // FIXME: Is callsign same as registration? Callsign is 8 alphanumeric characters left justified and padded with spaces
+    inst.com0 = (sg_baud_t) baud57600;
+    inst.com1 = (sg_baud_t) baud57600;
+    
+    // FIXME: Figure out what default values to set this to.
+    inst.eth.ipAddress = 0;
+    inst.eth.subnetMask = 0;
+    inst.eth.portNumber = 0;
+
+    // TODO: Figure out GPS integrity parameters
+    inst.sil = (sg_sil_t) silLow;
+    inst.sda = (sg_sda_t) sdaMinor;
+    inst.emitter = convert_to_sg_emitter_type(_frontend.out_state.cfg.emitterType);
+    inst.size = (sg_size_t) ((int8_t) _frontend.out_state.cfg.lengthWidth);
+    inst.maxSpeed = convert_to_sg_airspeed_type(_frontend.out_state.cfg.maxAircraftSpeed_knots);
+    inst.altOffset = 0;     // Alt encoder offset is legacy field that should always be 0.
+    // FIXME: Unsure how to get antenna configurations
+    inst.antenna = (sg_antenna_t) antBottom;
+
+    // FIXME: Figure out how to determine booleans
+    inst.altRes100 = true;
+    inst.hdgTrueNorth = false;
+    inst.airspeedTrue = false;
+    inst.heater = false;
+    inst.wowConnected = true;
+
+    sgEncodeInstall(txComBuffer, &inst, msgId++);
+    msgWrite(txComBuffer, SG_MSG_LEN_INSTALL);
+
+    // inst.icao = convert_base_to_decimal(16, _frontend.out_state.cfg.ICAO_id_param);  // Unsure why they are handling it like this.
+
 //     Packet pkt {};
 
 //     pkt.type = MsgType::Installation;
@@ -406,7 +435,7 @@ void AP_ADSB_Sagetech_MXS::send_msg_Installation()
 //     pkt.payload[15] = 1;        // GPS from COM port 0 (this port)
 //     pkt.payload[16] = 1;        // GPS Integrity
 
-//     pkt.payload[17] = _frontend.out_state.cfg.emitterType / 8;      // Emitter Set
+    // pkt.payload[17] = _frontend.out_state.cfg.emitterType / 8;      // Emitter Set
 //     pkt.payload[18] = _frontend.out_state.cfg.emitterType & 0x0F;   // Emitter Type
 
 //     pkt.payload[19] = _frontend.out_state.cfg.lengthWidth;          // Aircraft Size
@@ -429,7 +458,7 @@ void AP_ADSB_Sagetech_MXS::send_msg_PreFlight()
 {
 
     sg_flightid_t flightId;
-    strncpy(flightId.flightId, _frontend.out_state.cfg.callsign, 9);    // 9 is the callsign length
+    memcpy(&flightId.flightId, &_frontend.out_state.cfg.callsign, 9);       // Copy 9 character callsign
     sgEncodeFlightId(txComBuffer, &flightId, msgId++);
     msgWrite(txComBuffer, SG_MSG_LEN_FLIGHT);
 }
@@ -560,6 +589,43 @@ uint32_t AP_ADSB_Sagetech_MXS::convert_base_to_decimal(const uint8_t baseIn, uin
         inputNumber /= 10;
     }
     return outputNumber;
+}
+
+sg_emitter_t AP_ADSB_Sagetech_MXS::convert_to_sg_emitter_type(AP_Int8 emitterType)
+{
+    if (emitterType < 8) {
+        return (sg_emitter_t) ((int8_t) emitterType);
+    } else if (emitterType < 13) {
+        return (sg_emitter_t) ((int8_t) emitterType + SG_EMIT_OFFSET_B);
+    } else if (emitterType < 15) {
+        return (sg_emitter_t) ((int8_t) emitterType + SG_EMIT_OFFSET_B + 6);
+    } else if (emitterType < 21) {
+        return (sg_emitter_t) ((int8_t) emitterType + SG_EMIT_OFFSET_C);
+    } else {
+        return (sg_emitter_t) SG_EMIT_OFFSET_D;
+    }
+}
+
+sg_airspeed_t AP_ADSB_Sagetech_MXS::convert_to_sg_airspeed_type(float maxAirSpeed)
+{
+    int airspeed = (int) maxAirSpeed;
+    if (airspeed < 0) {
+        return (sg_airspeed_t) speedUnknown;
+    } else if (airspeed < 75) {
+        return (sg_airspeed_t) speed75kt;
+    } else if (airspeed < 150) {
+        return (sg_airspeed_t) speed150kt;
+    } else if (airspeed < 300) {
+        return (sg_airspeed_t) speed300kt;
+    } else if (airspeed < 600) {
+        return (sg_airspeed_t) speed600kt;
+    } else if (airspeed < 1200) {
+        return (sg_airspeed_t) speed1200kt;
+    } else if (airspeed >= 1200) {
+        return (sg_airspeed_t) speedGreater;
+    } else {
+        return (sg_airspeed_t) speedUnknown;
+    }
 }
 
 #endif // HAL_ADSB_SAGETECH_MXS_ENABLED

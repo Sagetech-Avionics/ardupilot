@@ -20,6 +20,8 @@
 #pragma once
 
 #include "AP_ADSB_Backend.h"
+#include <AP_ADSB/sagetech-sdk/sagetech_mxs.h>
+
 
 #ifndef HAL_ADSB_SAGETECH_MXS_ENABLED
 #define HAL_ADSB_SAGETECH_MXS_ENABLED HAL_ADSB_ENABLED
@@ -88,6 +90,28 @@ private:
         WaitingFor_Checksum,
     };
 
+    enum class emit_T {
+        aUnknown       = 0x00,
+        aLight,
+        aSmall,
+        aLarge,
+        aHighVortex,
+        aHeavy,
+        aPerformance,
+        aRotorCraft,
+        bUnknown,
+        bGlider,
+        bAir,
+        bParachutist,
+        bUltralight,
+        bUAV,
+        bSpace,
+        cUnknown,
+        cEmergency,
+        cService,
+        cPoint
+    };
+
     struct Packet {
         // const uint8_t   start = 0xAA;
         MsgType         type;
@@ -133,6 +157,23 @@ private:
     // stored on a GCS as a string field in different format, but then transmitted
     // over mavlink as a float which is always a decimal.
     uint32_t convert_base_to_decimal(const uint8_t baseIn, uint32_t inputNumber);
+
+    /**
+     * @brief Convert APInt8_t emitterType to Sagetech Emitter Type)
+     * 
+     * @param emitterType 
+     * @return sg_emitter_t 
+     */
+    sg_emitter_t convert_to_sg_emitter_type(AP_Int8 emitterType);
+
+    /**
+     * @brief Convert float max airspeed configuration to sagetech installation
+     * max airspeed type.
+     * 
+     * @param maxAirSpeed 
+     * @return sg_airspeed_t 
+     */
+    sg_airspeed_t convert_to_sg_airspeed_type(float maxAirSpeed);
 
     void msgWrite(uint8_t *data, uint16_t len);
 
