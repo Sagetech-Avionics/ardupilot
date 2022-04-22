@@ -65,10 +65,10 @@ bool AP_ADSB_Sagetech_MXS::init()
 }
 
 /**
- * @brief A periodic callback function (Called with freq of 10Hz) that sends 
+ * @brief The main callback function (Called with freq of 10Hz) that sends 
  * appropriate message types at specific times.
  * 
- * Serial Port Buffer (10Hz)
+ * Read Byte from Serial Port Buffer (10Hz)
  * Send installation message (every 5 seconds)
  * Send Flight ID (every 8.2 s)
  * Send Operating Message (every second)
@@ -90,7 +90,7 @@ void AP_ADSB_Sagetech_MXS::update()
         if (data < 0) {
             break;
         }
-        if (parse_byte((uint8_t)data)) {
+        if (parse_byte((uint8_t)data)) {        // CF: The way that it works right now it auto calls handle packet in parse_byte, so is this needed?
             handle_packet(message_in.packet);
         }
     } // while nbytes
@@ -140,36 +140,30 @@ void AP_ADSB_Sagetech_MXS::send_packet(const MsgType type)
 {
     switch (type) {
     case MsgType::Installation:
-        send_msg_Installation();
+        sendInstallationMessage();
         break;
     case MsgType::FlightID:
-        send_msg_PreFlight();
+        sendFlightIdMessage();
         break;
     case MsgType::Operating:
-        send_msg_Operating();
+        sendOperatingMessage();
         break;
     case MsgType::GPS_Data:
-        send_msg_GPS();
+        sendGpsDataMessage();
         break;
     default:
         break;
     }
 }
 
-void AP_ADSB_Sagetech_MXS::request_packet(const MsgType type)
+
+void AP_ADSB_Sagetech_MXS::sendDataReq(sg_datatype_t dataReqType)
 {
-    // // set all bytes in packet to 0 via {} so we only need to set the ones we need to
-    // Packet pkt {};
-
-    // pkt.type = MsgType::Data_Request;
-    // pkt.id = 0;
-    // pkt.payload_length = 4;
-
-    // pkt.payload[0] = static_cast<uint8_t>(type);
-
-    // send_msg(pkt);
+    sg_datareq_t dataReq;
+    dataReq.reqType = dataReqType;
+    sgEncodeDataReq(txComBuffer, &dataReq, msgId++);
+    msgWrite(txComBuffer, SG_MSG_LEN_DATAREQ);
 }
-
 
 /**
  * @brief Takes incoming packets, gets their message type, and 
@@ -182,13 +176,18 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
     // TODO: Populate with correct callbacks to handle incoming messages
     switch (msg.type) {
     case MsgType::ACK:
+        sg_ack_t ack;
+        if (sgDecodeAck((uint8_t*) &msg, &ack))
         {
-            Packet ack_msg {};
-            memcpy(&ack_msg, msg.payload, msg.payload_length); 
-            if (ack_msg.type != MsgType::ACK) { // sanity check so we don't cause endless recursion
-                handle_packet(ack_msg);
-            }
+            // TODO: Handle ACK
         }
+        // {    // FIXME: have I replaced this appropriately?
+        //     Packet ack_msg {};
+        //     memcpy(&ack_msg, msg.payload, msg.payload_length); 
+        //     if (ack_msg.type != MsgType::ACK) { // sanity check so we don't cause endless recursion
+        //         handle_packet(ack_msg);
+        //     }
+        // }
         break;
 
     case MsgType::Data_Request:
@@ -199,34 +198,78 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
     case MsgType::Operating:
     case MsgType::GPS_Data:
         // outbound only
-    default:
         // unhandled by autopilot
         break;
 
     case MsgType::Installation_Response:
+        sg_install_t inst;
+        if (sgDecodeInstall((uint8_t*) &msg, &inst))
+        {
+            // TODO: Pass Install Data to AP
+        }
+        break;
     case MsgType::FlightID_Response:
+        sg_flightid_t flightId;
+        if (sgDecodeFlightId((uint8_t*) &msg, &flightId))
+        {
+            // TODO: Pass Flight ID to AP
+        }
+        break;
     case MsgType::Status_Response:
-    case MsgType::RESERVED_0x84:
-    case MsgType::RESERVED_0x85:
+        sg_status_t status;
+        if (sgDecodeStatus((uint8_t*) &msg, &status))
+        {
+            // TODO: Pass Status Data to AP
+        }
+        break;
     case MsgType::Mode_Settings:
-    case MsgType::RESERVED_0x8D:
+        // FIXME: No sgModeSettings function
+        break;
     case MsgType::Version_Response:
+        sg_version_t version;
+        if (sgDecodeVersion((uint8_t*) &msg, &version))
+        {
+            // TODO: Pass version data to AP
+        }
+        break;
     case MsgType::Serial_Number_Response:
+        sg_serialnumber_t serial;
+        if (sgDecodeSerialNumber((uint8_t*) &msg, &serial))
+        {
+            // TODO: Pass serial number to AP
+        }
+        break;
     case MsgType::Target_Summary_Report:
-        // TODO
+        // FIXME: No sgDecode function
         break;
 
+    // ADSB Messages
     case MsgType::ADSB_StateVector_Report:
+        sg_svr_t svr;
+        if (sgDecodeSVR((uint8_t*) &msg, &svr))
+        {
+            // TODO: Pass SVR to AP
+        }
+        break;
     case MsgType::ADSB_ModeStatus_Report:
+        sg_msr_t msr;
+        if (sgDecodeMSR((uint8_t*) &msg, &msr))
+        {
+            // TODO: Pass MSR data to AP
+        }
+        break;
+    case MsgType::RESERVED_0x84:
+    case MsgType::RESERVED_0x85:
+    case MsgType::RESERVED_0x8D:
     case MsgType::TISB_StateVector_Report:
     case MsgType::TISB_ModeStatus_Report:
     case MsgType::TISB_CorasePos_Report:
     case MsgType::TISB_ADSB_Mgr_Report:
     case MsgType::ADSB_Target_State_Report:
     case MsgType::ADSB_Air_Ref_Vel_Report:
-        handle_adsb_in_msg(msg);
+        // handle_adsb_in_msg(msg);
+        // AFAIK we don't handle these.
         break;
-
     }
 }
 
@@ -345,17 +388,22 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
             message_in.packet.payload[message_in.index++] = data;
             if (message_in.index >= message_in.packet.payload_length) {
                 message_in.state = ParseState::WaitingFor_Checksum;
-                message_in.index = 0;
             }
             break;
 
+        // FIXME: Does this append the checksum to the payload?
         case ParseState::WaitingFor_Checksum:
             message_in.state = ParseState::WaitingFor_Start;
             if (message_in.checksum == data) {
+                // append the checksum to the payload and zero out the payload index
+                message_in.packet.payload[message_in.index] = data;
+                message_in.index = 0;
+                // message_in.packet.checksum = data;       // Doing it this way would put it after the max payload length.
                 handle_packet(message_in.packet);
             }
             break;
     }
+    // FIXME: Where does it return true?
     return false;
 }
 
@@ -376,7 +424,7 @@ void AP_ADSB_Sagetech_MXS::msgWrite(uint8_t *data, uint16_t len)
  * @brief Callback for sending an installation message.
  * 
  */
-void AP_ADSB_Sagetech_MXS::send_msg_Installation()
+void AP_ADSB_Sagetech_MXS::sendInstallationMessage()
 {
     sg_install_t inst;
     inst.icao = _frontend.out_state.cfg.ICAO_id;
@@ -408,53 +456,13 @@ void AP_ADSB_Sagetech_MXS::send_msg_Installation()
 
     sgEncodeInstall(txComBuffer, &inst, msgId++);
     msgWrite(txComBuffer, SG_MSG_LEN_INSTALL);
-
-    // inst.icao = convert_base_to_decimal(16, _frontend.out_state.cfg.ICAO_id_param);  // Unsure why they are handling it like this.
-
-//     Packet pkt {};
-
-//     pkt.type = MsgType::Installation;
-//     pkt.payload_length = 28; // 28== 0x1C
-
-//     // Mode C = 3, Mode S = 0
-//     pkt.id = (transponder_type == Transponder_Type::Mode_C) ? 3 : 0;
-
-// //    // convert a decimal 123456 to 0x123456
-//     // TODO: do a proper conversion. The param contains "131313" but what gets transmitted over the air is 0x200F1.
-//     const uint32_t icao_hex = convert_base_to_decimal(16, _frontend.out_state.cfg.ICAO_id_param);
-//     put_le24_ptr(&pkt.payload[0], icao_hex);
-
-//     memcpy(&pkt.payload[3], &_frontend.out_state.cfg.callsign, 8);
-
-//     pkt.payload[11] = 0;        // airspeed MAX
-
-//     pkt.payload[12] = 0;        // COM Port 0 baud, fixed at 57600
-//     pkt.payload[13] = 0;        // COM Port 1 baud, fixed at 57600
-//     pkt.payload[14] = 0;        // COM Port 2 baud, fixed at 57600
-
-//     pkt.payload[15] = 1;        // GPS from COM port 0 (this port)
-//     pkt.payload[16] = 1;        // GPS Integrity
-
-    // pkt.payload[17] = _frontend.out_state.cfg.emitterType / 8;      // Emitter Set
-//     pkt.payload[18] = _frontend.out_state.cfg.emitterType & 0x0F;   // Emitter Type
-
-//     pkt.payload[19] = _frontend.out_state.cfg.lengthWidth;          // Aircraft Size
-
-//     pkt.payload[20] = 0;        // Altitude Encoder Offset
-//     pkt.payload[21] = 0;        // Altitude Encoder Offset
-
-//     pkt.payload[22] = 0x07;     // ADSB In Control, enable reading everything
-//     pkt.payload[23] = 30;       // ADSB In Report max length COM Port 0 (this one)
-//     pkt.payload[24] = 0;        // ADSB In Report max length COM Port 1
-
-//     send_msg(pkt);
 }
 
 /**
  * @brief Callback for sending a FlightID message
  * 
  */
-void AP_ADSB_Sagetech_MXS::send_msg_PreFlight()
+void AP_ADSB_Sagetech_MXS::sendFlightIdMessage()
 {
 
     sg_flightid_t flightId;
@@ -467,7 +475,7 @@ void AP_ADSB_Sagetech_MXS::send_msg_PreFlight()
  * @brief Callback for sending an operating message.
  * 
  */
-void AP_ADSB_Sagetech_MXS::send_msg_Operating()
+void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
 {
     // Declare Operating Message Type
     sg_operating_t op;
@@ -514,7 +522,7 @@ void AP_ADSB_Sagetech_MXS::send_msg_Operating()
  * @brief Callback for sending a GPS data message
  * 
  */
-void AP_ADSB_Sagetech_MXS::send_msg_GPS()
+void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
 {
     sg_gps_t gps;
 

@@ -48,37 +48,37 @@ private:
     static const uint8_t  START_BYTE = 0xAA;
 
     enum class MsgType {
-        Installation            = 0x01,
-        FlightID                = 0x02,
-        Operating               = 0x03,
-        GPS_Data                = 0x04,
-        Data_Request            = 0x05,
+        Installation            = SG_MSG_TYPE_HOST_INSTALL,
+        FlightID                = SG_MSG_TYPE_HOST_FLIGHT,
+        Operating               = SG_MSG_TYPE_HOST_OPMSG,
+        GPS_Data                = SG_MSG_TYPE_HOST_GPS,
+        Data_Request            = SG_MSG_TYPE_HOST_DATAREQ,
         // RESERVED 0x06 - 0x0A
-        Target_Request          = 0x0B,
-        Mode                    = 0x0C,
+        Target_Request          = SG_MSG_TYPE_HOST_TARGETREQ,
+        Mode                    = SG_MSG_TYPE_HOST_MODE,
         // RESERVED 0x0D - 0xC1
 
-        ACK                     = 0x80,
-        Installation_Response   = 0x81,
-        FlightID_Response       = 0x82,
-        Status_Response         = 0x83,
+        ACK                     = SG_MSG_TYPE_XPNDR_ACK,
+        Installation_Response   = SG_MSG_TYPE_XPNDR_INSTALL,
+        FlightID_Response       = SG_MSG_TYPE_XPNDR_FLIGHT,
+        Status_Response         = SG_MSG_TYPE_XPNDR_STATUS,
         RESERVED_0x84           = 0x84,
         RESERVED_0x85           = 0x85,
-        Mode_Settings           = 0x8C,
+        Mode_Settings           = SG_MSG_TYPE_XPNDR_MODE,
         RESERVED_0x8D           = 0x8D,
-        Version_Response        = 0x8E,
-        Serial_Number_Response  = 0x8F,
-        Target_Summary_Report   = 0x90,
+        Version_Response        = SG_MSG_TYPE_XPNDR_VERSION,
+        Serial_Number_Response  = SG_MSG_TYPE_XPNDR_SERIALNUM,
+        Target_Summary_Report   = SG_MSG_TYPE_ADSB_TSUMMARY,
 
-        ADSB_StateVector_Report = 0x91,
-        ADSB_ModeStatus_Report  = 0x92,
+        ADSB_StateVector_Report = SG_MSG_TYPE_ADSB_SVR,
+        ADSB_ModeStatus_Report  = SG_MSG_TYPE_ADSB_MSR,
         TISB_StateVector_Report = 0x93,
         TISB_ModeStatus_Report  = 0x94,
         TISB_CorasePos_Report   = 0x95,
         TISB_ADSB_Mgr_Report    = 0x96,
 
-        ADSB_Target_State_Report= 0x97,
-        ADSB_Air_Ref_Vel_Report = 0x98,
+        ADSB_Target_State_Report= SG_MSG_TYPE_ADSB_TSTATE,
+        ADSB_Air_Ref_Vel_Report = SG_MSG_TYPE_ADSB_ARVR,
     };
 
     enum class ParseState {
@@ -112,8 +112,8 @@ private:
         cPoint
     };
 
-    struct Packet {
-        // const uint8_t   start = 0xAA;
+    struct __attribute__((packed)) Packet {
+        const uint8_t   start = SG_MSG_START_BYTE;
         MsgType         type;
         uint8_t         id;
         uint8_t         payload_length;
@@ -142,10 +142,10 @@ private:
     void handle_ack(const Packet &msg);
 
     // send messages to to transceiver
-    void send_msg_Installation();
-    void send_msg_PreFlight();
-    void send_msg_Operating();
-    void send_msg_GPS();
+    void sendInstallationMessage();
+    void sendFlightIdMessage();
+    void sendOperatingMessage();
+    void sendGpsDataMessage();
 
     // send packet by type
     void send_packet(const MsgType type);
@@ -175,7 +175,19 @@ private:
      */
     sg_airspeed_t convert_to_sg_airspeed_type(float maxAirSpeed);
 
+    /**
+     * @brief Writes message of len bytes to the serial device.
+     * 
+     * @param data 
+     * @param len 
+     */
     void msgWrite(uint8_t *data, uint16_t len);
+
+    /**
+     * @brief Encodes and sends a Status Data Request message.
+     * 
+     */
+    void sendDataReq(sg_datatype_t dataReqType);
 
 
     // timers for each out-bound packet
