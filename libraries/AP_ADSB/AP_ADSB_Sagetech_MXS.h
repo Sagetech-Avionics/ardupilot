@@ -21,6 +21,7 @@
 
 #include "AP_ADSB_Backend.h"
 #include <AP_ADSB/sagetech-sdk/sagetech_mxs.h>
+#include <AP_ADSB/sagetech-sdk/sgUtil.h>
 
 
 #ifndef HAL_ADSB_SAGETECH_MXS_ENABLED
@@ -33,13 +34,32 @@ class AP_ADSB_Sagetech_MXS : public AP_ADSB_Backend {
 public:
     using AP_ADSB_Backend::AP_ADSB_Backend;
 
-    // init - performs any required initialisation for this instance
+    /**
+     * @brief Performs required initialization for this instance
+     * 
+     * @return true if initialization successful
+     */
     bool init() override;
 
-    // update - should be called periodically
+    /**
+     * @brief The main callback function (Called with freq of 10Hz) that sends 
+     * appropriate message types at specific times.
+     * 
+     * Read Byte from Serial Port Buffer (10Hz)
+     * Send installation message (every 5 seconds)
+     * Send Flight ID (every 8.2 s)
+     * Send Operating Message (every second)
+     * Send GPS data (flying: 5Hz, not flying: 1Hz)
+     * 
+     */
     void update() override;
 
-    // static detection function
+    /**
+     * @brief Detect if a port is configured as Sagetech
+     * 
+     * @return true 
+     * @return false 
+     */
     static bool detect();
 
 private:
@@ -72,6 +92,8 @@ private:
 
         ADSB_StateVector_Report = SG_MSG_TYPE_ADSB_SVR,
         ADSB_ModeStatus_Report  = SG_MSG_TYPE_ADSB_MSR,
+
+        // TISB No longer supported by MXS.
         TISB_StateVector_Report = 0x93,
         TISB_ModeStatus_Report  = 0x94,
         TISB_CorasePos_Report   = 0x95,
@@ -128,38 +150,98 @@ private:
         uint8_t         checksum;
     } message_in;
 
-    // handling inbound byte and process it in the state machine
-    bool parse_byte(const uint8_t data);
-
-    // handle inbound packet
-    void handle_packet(const Packet &msg);
-
-    // send message to serial port
-    void send_msg(Packet &msg);
-
-    // handle inbound msgs
-    void handle_adsb_in_msg(const Packet &msg);
-    void handle_ack(const Packet &msg);
-
-    // send messages to to transceiver
-    void sendInstallationMessage();
-    void sendFlightIdMessage();
-    void sendOperatingMessage();
-    void sendGpsDataMessage();
-
-    // send packet by type
+    /**
+     * @brief Takes the message type provided and calls the correct
+     * callback function to send the correct message type
+     * 
+     * @param type : MsgType to send.
+     */
     void send_packet(const MsgType type);
 
-    // send msg to request a packet by type
-    void request_packet(const MsgType type);
+    /**
+     * @brief Given the dataReqType, send the appropriate data request message
+     * 
+     * @param dataReqType 
+     */
+    void sendDataReq(sg_datatype_t dataReqType);
 
-    // Convert base 8 or 16 to decimal. Used to convert an octal/hexadecimal value
-    // stored on a GCS as a string field in different format, but then transmitted
-    // over mavlink as a float which is always a decimal.
+    /**
+     * @brief Takes incoming packets, gets their message type, and 
+     * appropriately handles them with the correct callbacks.
+     * 
+     * @param msg Message packet received, cast into Packet type.
+     */
+    void handle_packet(const Packet &msg);
+
+    /**
+     * @brief Sends data received from ADSB State Vector Report to AutoPilot
+     * 
+     * @param svr 
+     */
+    void handleSVR(sg_svr_t svr);
+
+    /**
+     * @brief Hande a received ADSB mode status report and updates the vehicle list
+     * 
+     * @param msr Sagetech SDK Mode Status Report type
+     */
+    void handleMSR(sg_msr_t msr);
+
+
+    /**
+     * @brief Handles an incoming byte and processes it through the state
+     * machine to determine if end of message is reached.
+     * 
+     * @param data : incoming byte
+     * @return false : if not yet reached packet termination
+     */
+    bool parse_byte(const uint8_t data);
+
+    /**
+     * @brief Takes a raw buffer and writes it out to the device port.
+     * 
+     * @param data : pointer to data buffer
+     * @param len : number of bytes to write
+     */
+    void msgWrite(uint8_t *data, uint16_t len);
+
+
+    /**
+     * @brief Callback for sending an installation message.
+     * 
+     */
+    void sendInstallationMessage();
+
+    /**
+     * @brief Callback for sending a FlightID message
+     * 
+     */
+    void sendFlightIdMessage();
+
+    /**
+     * @brief Callback for sending an operating message.
+     * 
+     */
+    void sendOperatingMessage();
+
+    /**
+     * @brief Callback for sending a GPS data message
+     * 
+     */
+    void sendGpsDataMessage();
+
+    /**
+    * @brief Convert base 8 or 16 to decimal. Used to convert an octal/hexadecimal value stored on a GCS as a string field in different format, but then transmitted over mavlink as a float which is always a decimal.
+    * baseIn: base of input number
+    * inputNumber: value currently in base "baseIn" to be converted to base "baseOut"
+    *
+    * Example: convert ADSB squawk octal "1200" stored in memory as 0x0280 to 0x04B0
+    *          uint16_t squawk_decimal = convertMathBase(8, squawk_octal);
+    */
     uint32_t convert_base_to_decimal(const uint8_t baseIn, uint32_t inputNumber);
 
     /**
-     * @brief Convert APInt8_t emitterType to Sagetech Emitter Type)
+     * @brief Convert the AP_ADSB AP_Int8 Emitter Type to the Sagetech Emitter Type definition
      * 
      * @param emitterType 
      * @return sg_emitter_t 
@@ -167,28 +249,12 @@ private:
     sg_emitter_t convert_to_sg_emitter_type(AP_Int8 emitterType);
 
     /**
-     * @brief Convert float max airspeed configuration to sagetech installation
-     * max airspeed type.
+     * @brief Convert the float maxAirSpeed value to the Sagetech Max Airspeed Type
      * 
      * @param maxAirSpeed 
      * @return sg_airspeed_t 
      */
     sg_airspeed_t convert_to_sg_airspeed_type(float maxAirSpeed);
-
-    /**
-     * @brief Writes message of len bytes to the serial device.
-     * 
-     * @param data 
-     * @param len 
-     */
-    void msgWrite(uint8_t *data, uint16_t len);
-
-    /**
-     * @brief Encodes and sends a Status Data Request message.
-     * 
-     */
-    void sendDataReq(sg_datatype_t dataReqType);
-
 
     // timers for each out-bound packet
     uint32_t        last_packet_initialize_ms;

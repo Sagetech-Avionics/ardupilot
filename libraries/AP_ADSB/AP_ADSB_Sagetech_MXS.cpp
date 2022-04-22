@@ -33,48 +33,28 @@
 
 #define ADSB_COM_TX_BUFFER_LEN 128
 
-// #define SAGETECH_SCALER_LATLNG              (1.0f/2.145767E-5f)     //   180/(2^23)
-// #define SAGETECH_SCALER_KNOTS_TO_CMS        ((KNOTS_TO_M_PER_SEC/0.125f) * 100.0f)
-// #define SAGETECH_SCALER_ALTITUDE            (1.0f/0.015625f)
-// #define SAGETECH_SCALER_HEADING_CM          ((360.0f/256.0f) * 100.0f)
-
-// #define SAGETECH_VALIDFLAG_LATLNG           (1U<<0)
-// #define SAGETECH_VALIDFLAG_ALTITUDE         (1U<<1)
-// #define SAGETECH_VALIDFLAG_VELOCITY         (1U<<2)
-// #define SAGETECH_VALIDFLAG_GND_SPEED        (1U<<3)
-// #define SAGETECH_VALIDFLAG_HEADING          (1U<<4)
-// #define SAGETECH_VALIDFLAG_V_RATE_GEO       (1U<<5)
-// #define SAGETECH_VALIDFLAG_V_RATE_BARO      (1U<<6)
-// #define SAGETECH_VALIDFLAG_EST_LATLNG       (1U<<7)
-// #define SAGETECH_VALIDFLAG_EST_VELOCITY     (1U<<8)
+#define SAGETECH_SCALE_FEET_TO_MM (304.8f)
+#define SAGETECH_SCALE_KNOTS_TO_CM_PER_SEC (51.4444f)
+#define SAGETECH_SCALE_FT_PER_MIN_TO_CM_PER_SEC (0.508f)
 
 static uint8_t txComBuffer[ADSB_COM_TX_BUFFER_LEN];
 static uint8_t msgId = 0;
 
-// detect if any port is configured as Sagetech
+// Documented in header file
 bool AP_ADSB_Sagetech_MXS::detect()
 {
     return AP::serialmanager().have_serial(AP_SerialManager::SerialProtocol_ADSB, 0);
 }
 
-// Init, called once after class is constructed
+
+// Documented in header file
 bool AP_ADSB_Sagetech_MXS::init()
 {
     _port = AP::serialmanager().find_serial(AP_SerialManager::SerialProtocol_ADSB, 0);
     return (_port != nullptr);
 }
 
-/**
- * @brief The main callback function (Called with freq of 10Hz) that sends 
- * appropriate message types at specific times.
- * 
- * Read Byte from Serial Port Buffer (10Hz)
- * Send installation message (every 5 seconds)
- * Send Flight ID (every 8.2 s)
- * Send Operating Message (every second)
- * Send GPS data (flying: 5Hz, not flying: 1Hz)
- * 
- */
+// Documented in header file
 void AP_ADSB_Sagetech_MXS::update()
 {
     if (_port == nullptr) {
@@ -130,12 +110,7 @@ void AP_ADSB_Sagetech_MXS::update()
     }
 }
 
-/**
- * @brief Takes the message type provided and calls the correct
- * callback function to send the correct message type
- * 
- * @param type : MsgType to send.
- */
+// Documented in header file
 void AP_ADSB_Sagetech_MXS::send_packet(const MsgType type)
 {
     switch (type) {
@@ -156,7 +131,7 @@ void AP_ADSB_Sagetech_MXS::send_packet(const MsgType type)
     }
 }
 
-
+// Documented in header file
 void AP_ADSB_Sagetech_MXS::sendDataReq(sg_datatype_t dataReqType)
 {
     sg_datareq_t dataReq;
@@ -165,12 +140,7 @@ void AP_ADSB_Sagetech_MXS::sendDataReq(sg_datatype_t dataReqType)
     msgWrite(txComBuffer, SG_MSG_LEN_DATAREQ);
 }
 
-/**
- * @brief Takes incoming packets, gets their message type, and 
- * appropriately handles them with the correct callbacks.
- * 
- * @param msg Message packet received, cast into Packet type.
- */
+// Documented in header file
 void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
 {
     // TODO: Populate with correct callbacks to handle incoming messages
@@ -203,66 +173,55 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
 
     case MsgType::Installation_Response:
         sg_install_t inst;
-        if (sgDecodeInstall((uint8_t*) &msg, &inst))
-        {
+        if (sgDecodeInstall((uint8_t*) &msg, &inst)) {
             // TODO: Pass Install Data to AP
         }
         break;
     case MsgType::FlightID_Response:
         sg_flightid_t flightId;
-        if (sgDecodeFlightId((uint8_t*) &msg, &flightId))
-        {
+        if (sgDecodeFlightId((uint8_t*) &msg, &flightId)) {
             // TODO: Pass Flight ID to AP
         }
         break;
     case MsgType::Status_Response:
         sg_status_t status;
-        if (sgDecodeStatus((uint8_t*) &msg, &status))
-        {
+        if (sgDecodeStatus((uint8_t*) &msg, &status)) {
             // TODO: Pass Status Data to AP
         }
         break;
-    case MsgType::Mode_Settings:
-        // FIXME: No sgModeSettings function
-        break;
     case MsgType::Version_Response:
         sg_version_t version;
-        if (sgDecodeVersion((uint8_t*) &msg, &version))
-        {
+        if (sgDecodeVersion((uint8_t*) &msg, &version)) {
             // TODO: Pass version data to AP
         }
         break;
     case MsgType::Serial_Number_Response:
         sg_serialnumber_t serial;
-        if (sgDecodeSerialNumber((uint8_t*) &msg, &serial))
-        {
+        if (sgDecodeSerialNumber((uint8_t*) &msg, &serial)) {
             // TODO: Pass serial number to AP
         }
         break;
-    case MsgType::Target_Summary_Report:
-        // FIXME: No sgDecode function
-        break;
 
     // ADSB Messages
+    case MsgType::TISB_StateVector_Report:
     case MsgType::ADSB_StateVector_Report:
         sg_svr_t svr;
-        if (sgDecodeSVR((uint8_t*) &msg, &svr))
-        {
-            // TODO: Pass SVR to AP
+        if (sgDecodeSVR((uint8_t*) &msg, &svr)) {
+            handleSVR(svr);
         }
         break;
+    case MsgType::TISB_ModeStatus_Report:
     case MsgType::ADSB_ModeStatus_Report:
         sg_msr_t msr;
-        if (sgDecodeMSR((uint8_t*) &msg, &msr))
-        {
-            // TODO: Pass MSR data to AP
+        if (sgDecodeMSR((uint8_t*) &msg, &msr)) {
+            handleMSR(msr);
         }
         break;
+    case MsgType::Mode_Settings:                // Do we handle this?
+    case MsgType::Target_Summary_Report:        // Do we handle this?
     case MsgType::RESERVED_0x84:
     case MsgType::RESERVED_0x85:
     case MsgType::RESERVED_0x8D:
-    case MsgType::TISB_StateVector_Report:
-    case MsgType::TISB_ModeStatus_Report:
     case MsgType::TISB_CorasePos_Report:
     case MsgType::TISB_ADSB_Mgr_Report:
     case MsgType::ADSB_Target_State_Report:
@@ -273,126 +232,94 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
     }
 }
 
-
-/**
- * @brief Received ADSB-in message callback function.
- * 
- * @param msg Received packet.
- */
-void AP_ADSB_Sagetech_MXS::handle_adsb_in_msg(const Packet &msg)
+// Documented in header file
+void AP_ADSB_Sagetech_MXS::handleSVR(sg_svr_t svr)
 {
-    // AP_ADSB::adsb_vehicle_t vehicle {};
+    AP_ADSB::adsb_vehicle_t vehicle {};
+    vehicle.last_update_ms = AP_HAL::millis();
+    vehicle.info.ICAO_address = svr.addr;
 
-    // vehicle.last_update_ms = AP_HAL::millis();
+    if (svr.validity.position) {
+        vehicle.info.lat = (int32_t) (svr.lat * 1e7);
+        vehicle.info.lon = (int32_t) (svr.lon * 1e7);
+        vehicle.info.flags |= ADSB_FLAGS_VALID_COORDS;
+    }
+    if (svr.validity.geoAlt) {
+        vehicle.info.altitude_type = ADSB_ALTITUDE_TYPE_GEOMETRIC;
+        vehicle.info.altitude = (int32_t) (svr.airborne.geoAlt * SAGETECH_SCALE_FEET_TO_MM);    // Convert from feet to mm
+        vehicle.info.flags |= ADSB_FLAGS_VALID_ALTITUDE;
+    }
+    if (svr.validity.airSpeed || svr.validity.surfSpeed) {
+        vehicle.info.hor_velocity =  (int32_t)(svr.airborne.speed * SAGETECH_SCALE_KNOTS_TO_CM_PER_SEC);   // Convert from knots to cm/s
+        vehicle.info.flags |= ADSB_FLAGS_VALID_VELOCITY;
+    }
+    if (svr.validity.surfHeading) {
+        vehicle.info.heading = svr.airborne.heading;
+        vehicle.info.flags |= ADSB_FLAGS_VALID_HEADING;
+    }
+    if (svr.validity.geoVRate || svr.validity.baroVRate) {
+        vehicle.info.ver_velocity = svr.airborne.vrate * SAGETECH_SCALE_FT_PER_MIN_TO_CM_PER_SEC; // Convert from ft/min to cm/s
+        vehicle.info.flags |= ADSB_FLAGS_VERTICAL_VELOCITY_VALID;
+    }
 
-    // switch (msg.type) {
-    // case MsgType::ADSB_StateVector_Report: { // 0x91
-    //     const uint16_t validFlags = le16toh_ptr(&msg.payload[8]);
-    //     vehicle.info.ICAO_address = le24toh_ptr(&msg.payload[10]);
-
-    //     if (validFlags & SAGETECH_VALIDFLAG_LATLNG) {
-    //         vehicle.info.lat = ((int32_t)le24toh_ptr(&msg.payload[20])) * SAGETECH_SCALER_LATLNG;
-    //         vehicle.info.lon = ((int32_t)le24toh_ptr(&msg.payload[23])) * SAGETECH_SCALER_LATLNG;
-    //         vehicle.info.flags |= ADSB_FLAGS_VALID_COORDS;
-    //     }
-
-    //     if (validFlags & SAGETECH_VALIDFLAG_ALTITUDE) {
-    //         vehicle.info.altitude = (int32_t)le24toh_ptr(&msg.payload[26]);
-    //         vehicle.info.flags |= ADSB_FLAGS_VALID_ALTITUDE;
-    //     }
-
-    //     if (validFlags & SAGETECH_VALIDFLAG_VELOCITY) {
-    //         const float velNS = ((int32_t)le16toh_ptr(&msg.payload[29])) * SAGETECH_SCALER_KNOTS_TO_CMS;
-    //         const float velEW = ((int32_t)le16toh_ptr(&msg.payload[31])) * SAGETECH_SCALER_KNOTS_TO_CMS;
-    //         vehicle.info.hor_velocity = Vector2f(velEW, velNS).length();
-    //         vehicle.info.flags |= ADSB_FLAGS_VALID_VELOCITY;
-    //     }
-
-    //     if (validFlags & SAGETECH_VALIDFLAG_HEADING) {
-    //         vehicle.info.heading = ((float)msg.payload[29]) * SAGETECH_SCALER_HEADING_CM;
-    //         vehicle.info.flags |= ADSB_FLAGS_VALID_HEADING;
-    //     }
-
-    //     if ((validFlags & SAGETECH_VALIDFLAG_V_RATE_GEO) || (validFlags & SAGETECH_VALIDFLAG_V_RATE_BARO)) {
-    //         vehicle.info.ver_velocity = (int16_t)le16toh_ptr(&msg.payload[38]);
-    //         vehicle.info.flags |= ADSB_FLAGS_VERTICAL_VELOCITY_VALID;
-    //     }
-
-    //     _frontend.handle_adsb_vehicle(vehicle);
-    //     break;
-    // }
-    // case MsgType::ADSB_ModeStatus_Report:   // 0x92
-    //     vehicle.info.ICAO_address = le24toh_ptr(&msg.payload[9]);
-
-    //     if (msg.payload[16] != 0) {
-    //         // if string is non-null, consider it valid
-    //         memcpy(&vehicle.info, &msg.payload[16], 8);
-    //         vehicle.info.flags |= ADSB_FLAGS_VALID_CALLSIGN;
-    //     }
-
-    //     _frontend.handle_adsb_vehicle(vehicle);
-    //     break;
-    // case MsgType::TISB_StateVector_Report:
-    // case MsgType::TISB_ModeStatus_Report:
-    // case MsgType::TISB_CorasePos_Report:
-    // case MsgType::TISB_ADSB_Mgr_Report:
-    //     // TODO
-    //     return;
-
-    // default:
-    //     return;
-    // }
-
+    _frontend.handle_adsb_vehicle(vehicle);
 }
 
-/**
- * @brief Handles an incoming byte and processes it through the state
- * machine to determine if end of message is reached.
- * 
- * @param data : incoming byte
- * @return true : if a full packet has been received
- * @return false : if not yet reached packet termination
- */
+// Documented in header file
+void AP_ADSB_Sagetech_MXS::handleMSR(sg_msr_t msr)
+{
+    AP_ADSB::adsb_vehicle_t vehicle {};
+    vehicle.last_update_ms = AP_HAL::millis();
+    vehicle.info.ICAO_address = msr.addr;
+
+    // If the firsty byte of the callsign isn't 0x00
+    if (msr.callsign[0] != 0) {
+        memcpy(&vehicle.info.callsign, &msr.callsign, 8);
+    }
+
+    _frontend.handle_adsb_vehicle(vehicle);
+}
+
+// Documented in header file
 bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
 {
     switch (message_in.state) {
         default:
-        case ParseState::WaitingFor_Start:
+        case ParseState::WaitingFor_Start: {
             if (data == START_BYTE) {
                 message_in.checksum = data; // initialize checksum here
                 message_in.state = ParseState::WaitingFor_MsgType;
             }
             break;
-
-        case ParseState::WaitingFor_MsgType:
+        }
+        case ParseState::WaitingFor_MsgType: {
             message_in.checksum += data;
             message_in.packet.type = static_cast<MsgType>(data);
             message_in.state = ParseState::WaitingFor_MsgId;
             break;
-
-        case ParseState::WaitingFor_MsgId:
+        }
+        case ParseState::WaitingFor_MsgId: {
             message_in.checksum += data;
             message_in.packet.id = data;
             message_in.state = ParseState::WaitingFor_PayloadLen;
             break;
-
-        case ParseState::WaitingFor_PayloadLen:
+        }
+        case ParseState::WaitingFor_PayloadLen: {
             message_in.checksum += data;
             message_in.packet.payload_length = data;
             message_in.index = 0;
             message_in.state = (data == 0) ? ParseState::WaitingFor_Checksum : ParseState::WaitingFor_PayloadContents;
             break;
-
-        case ParseState::WaitingFor_PayloadContents:
+        }
+        case ParseState::WaitingFor_PayloadContents: {
             message_in.checksum += data; // initialize checksum here
             message_in.packet.payload[message_in.index++] = data;
             if (message_in.index >= message_in.packet.payload_length) {
                 message_in.state = ParseState::WaitingFor_Checksum;
             }
             break;
-
-        // FIXME: Does this append the checksum to the payload?
-        case ParseState::WaitingFor_Checksum:
+        }
+        case ParseState::WaitingFor_Checksum: {
             message_in.state = ParseState::WaitingFor_Start;
             if (message_in.checksum == data) {
                 // append the checksum to the payload and zero out the payload index
@@ -402,17 +329,12 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
                 handle_packet(message_in.packet);
             }
             break;
+        }
     }
-    // FIXME: Where does it return true?
     return false;
 }
 
-/**
- * @brief Takes a raw buffer and writes it out to the device port.
- * 
- * @param data : pointer to data buffer
- * @param len : number of bytes to write
- */
+// Documented in header file
 void AP_ADSB_Sagetech_MXS::msgWrite(uint8_t *data, uint16_t len)
 {
     if (_port != nullptr) {
@@ -420,10 +342,7 @@ void AP_ADSB_Sagetech_MXS::msgWrite(uint8_t *data, uint16_t len)
     }
 }
 
-/**
- * @brief Callback for sending an installation message.
- * 
- */
+// Documented in header file
 void AP_ADSB_Sagetech_MXS::sendInstallationMessage()
 {
     sg_install_t inst;
@@ -458,10 +377,7 @@ void AP_ADSB_Sagetech_MXS::sendInstallationMessage()
     msgWrite(txComBuffer, SG_MSG_LEN_INSTALL);
 }
 
-/**
- * @brief Callback for sending a FlightID message
- * 
- */
+// Documented in header file
 void AP_ADSB_Sagetech_MXS::sendFlightIdMessage()
 {
 
@@ -471,10 +387,7 @@ void AP_ADSB_Sagetech_MXS::sendFlightIdMessage()
     msgWrite(txComBuffer, SG_MSG_LEN_FLIGHT);
 }
 
-/**
- * @brief Callback for sending an operating message.
- * 
- */
+// Documented in header file
 void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
 {
     // Declare Operating Message Type
@@ -484,6 +397,8 @@ void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
     op.squawk = convert_base_to_decimal(8, last_operating_squawk);
     op.opMode = (sg_op_mode_t) modeOff;     // FIXME: Figure out how to update/get the OpMode
                                             // Is this rfSelect/last_operating_rf_select?
+                                            // Use a data64/data16 type to allow us to send the Mode commands from mission control
+                                            // from the ground station (mavlink to sagetech)
     op.savePowerUp = true;      // Save power-up state in non-volatile
     op.enableSqt = false;       // Enable extended squitters
     op.enableXBit = false;      // Enable the x-bit
@@ -518,10 +433,7 @@ void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
     msgWrite(txComBuffer, SG_MSG_LEN_OPMSG);
 }
 
-/**
- * @brief Callback for sending a GPS data message
- * 
- */
+// Documented in header file
 void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
 {
     sg_gps_t gps;
@@ -575,15 +487,7 @@ void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
     msgWrite(txComBuffer, sizeof(sg_gps_t));
 }
 
-
-/*
- * Convert base 8 or 16 to decimal. Used to convert an octal/hexadecimal value stored on a GCS as a string field in different format, but then transmitted over mavlink as a float which is always a decimal.
- * baseIn: base of input number
- * inputNumber: value currently in base "baseIn" to be converted to base "baseOut"
- *
- * Example: convert ADSB squawk octal "1200" stored in memory as 0x0280 to 0x04B0
- *          uint16_t squawk_decimal = convertMathBase(8, squawk_octal);
- */
+// Documented in header file
 uint32_t AP_ADSB_Sagetech_MXS::convert_base_to_decimal(const uint8_t baseIn, uint32_t inputNumber)
 {
     // Our only sensible input bases are 16 and 8
@@ -599,6 +503,7 @@ uint32_t AP_ADSB_Sagetech_MXS::convert_base_to_decimal(const uint8_t baseIn, uin
     return outputNumber;
 }
 
+// Documented in header file
 sg_emitter_t AP_ADSB_Sagetech_MXS::convert_to_sg_emitter_type(AP_Int8 emitterType)
 {
     if (emitterType < 8) {
@@ -614,6 +519,7 @@ sg_emitter_t AP_ADSB_Sagetech_MXS::convert_to_sg_emitter_type(AP_Int8 emitterTyp
     }
 }
 
+// Documented in header file
 sg_airspeed_t AP_ADSB_Sagetech_MXS::convert_to_sg_airspeed_type(float maxAirSpeed)
 {
     int airspeed = (int) maxAirSpeed;

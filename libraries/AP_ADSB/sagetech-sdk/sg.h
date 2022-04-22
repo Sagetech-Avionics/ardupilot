@@ -536,15 +536,15 @@ typedef struct
 /// The airborne part of a state vector report.
 typedef struct
 {
-   int16_t   velNS;           /// The NS speed vector component.
-   int16_t   velEW;           /// The EW speed vector component.
-   int16_t   speed;           /// Speed from N/S and E/W velocity.
-   int16_t   heading;         /// Heading from N/S and E/W velocity.
-   int32_t   geoAlt;          /// Geometric altitude.
-   int32_t   baroAlt;         /// Barometric altitude.
-   int16_t   vrate;           /// Vertical rate.
-   float     estLat;          /// Estimated latitude.
-   float     estLon;          /// Estimated longitude.
+   int16_t   velNS;           /// The NS speed vector component. [knots]
+   int16_t   velEW;           /// The EW speed vector component. [knots]
+   int16_t   speed;           /// Speed from N/S and E/W velocity. [knots]
+   int16_t   heading;         /// Heading from N/S and E/W velocity. [deg from N]
+   int32_t   geoAlt;          /// Geometric altitude. [ft]
+   int32_t   baroAlt;         /// Barometric altitude. [ft]
+   int16_t   vrate;           /// Vertical rate. [ft/min]
+   float     estLat;          /// Estimated latitude. [deg N]
+   float     estLon;          /// Estimated longitude. [deg E]
 } sg_svr_airborne_t;
 
 typedef struct
