@@ -5,6 +5,7 @@ extern "C"{
 #endif 
 
 #include "sg.h"
+#include "sgUtil.h"
 
 #ifdef __cplusplus
 }

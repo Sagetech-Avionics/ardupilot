@@ -21,7 +21,6 @@
 #include "AP_ADSB_Sagetech_MXS.h"
 
 #if HAL_ADSB_SAGETECH_MXS_ENABLED
-#include <AP_GPS/AP_GPS.h>
 #include <GCS_MAVLink/GCS.h>
 #include <AP_AHRS/AP_AHRS.h>
 #include <AP_RTC/AP_RTC.h>
