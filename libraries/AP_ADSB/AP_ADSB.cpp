@@ -205,14 +205,11 @@ void AP_ADSB::init(void)
 
     if (detected_num_instances == 0) {
         for (uint8_t i=0; i<ADSB_MAX_INSTANCES; i++) {
-            gcs().send_text(MAV_SEVERITY_WARNING, "ADSB: Attempting to detect instance %d.", i);
             detect_instance(i);
             if (_backend[i] == nullptr) {
-                gcs().send_text(MAV_SEVERITY_WARNING, "ADSB: Backend Instance is Null");
                 continue;
             }
             if (!_backend[i]->init()) {
-                gcs().send_text(MAV_SEVERITY_WARNING, "ADSB: Unable to initialize backend.");
                 delete _backend[i];
                 _backend[i] = nullptr;
                 continue;
@@ -258,12 +255,10 @@ void AP_ADSB::detect_instance(uint8_t instance)
 {
     switch (get_type(instance)) {
     case Type::None:
-        gcs().send_text(MAV_SEVERITY_WARNING, "ADSB: No ADSB Type given.");
         return;
 
     case Type::uAvionix_MAVLink:
 #if HAL_ADSB_UAVIONIX_MAVLINK_ENABLED
-        gcs().send_text(MAV_SEVERITY_WARNING, "ADSB: Checking for uAvionix_MAVLink.");
         if (AP_ADSB_uAvionix_MAVLink::detect()) {
             _backend[instance] = new AP_ADSB_uAvionix_MAVLink(*this, instance);
             return;
@@ -273,7 +268,6 @@ void AP_ADSB::detect_instance(uint8_t instance)
 
     case Type::uAvionix_UCP:
 #if HAL_ADSB_UCP_ENABLED
-        gcs().send_text(MAV_SEVERITY_WARNING, "ADSB: Checking for uAvionix_UCP.");
         if (AP_ADSB_uAvionix_UCP::detect()) {
             _backend[instance] = new AP_ADSB_uAvionix_UCP(*this, instance);
             return;
@@ -288,7 +282,6 @@ void AP_ADSB::detect_instance(uint8_t instance)
         //     _backend[instance] = new AP_ADSB_Sagetech(*this, instance);
         //     return;
         // }
-        gcs().send_text(MAV_SEVERITY_WARNING, "ADSB: Checking for Sagetech MXS in Sagetech Override.");
         if (AP_ADSB_Sagetech_MXS::detect()) {
             _backend[instance] = new AP_ADSB_Sagetech_MXS(*this, instance);
             return;
@@ -298,7 +291,6 @@ void AP_ADSB::detect_instance(uint8_t instance)
 
     case Type::Sagetech_MXS:
 #if HAL_ADSB_SAGETECH_MXS_ENABLED
-        gcs().send_text(MAV_SEVERITY_WARNING, "ADSB: Checking for Sagetech MXS.");
         if (AP_ADSB_Sagetech_MXS::detect()) {
             _backend[instance] = new AP_ADSB_Sagetech_MXS(*this, instance);
             return;

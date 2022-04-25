@@ -82,8 +82,6 @@ void AP_ADSB_Sagetech_MXS::update()
     // -----------------------------
     if (!last_packet_initialize_ms || (now_ms - last_packet_initialize_ms >= 5000)) {
         last_packet_initialize_ms = now_ms;
-        // GCS_SEND_TEXT(MAV_SEVERITY_WARNING, "Best number ever: %f", 42.4242424242);
-        // printf("This is a test");
         // send_packet(MsgType::Installation);
 
     } else if (!last_packet_PreFlight_ms || (now_ms - last_packet_PreFlight_ms >= 8200)) {
@@ -391,9 +389,10 @@ void AP_ADSB_Sagetech_MXS::sendFlightIdMessage()
 // Documented in header file
 void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
 {
+    
     // Declare Operating Message Type
     sg_operating_t op;
-
+    gcs().send_text(MAV_SEVERITY_INFO, "sendOperatingMessage: Attempting to send operating message");
     // Populate operating message structure
     op.squawk = convert_base_to_decimal(8, last_operating_squawk);
     op.opMode = (sg_op_mode_t) modeOff;     // FIXME: Figure out how to update/get the OpMode
@@ -437,7 +436,7 @@ void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
 // Documented in header file
 void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
 {
-    gcs().send_text(MAV_SEVERITY_WARNING, "sendGPSDataMessage: Sending GPS Data");
+    gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: Sending GPS Data");
     sg_gps_t gps;
 
     // Populate the GPS object
@@ -474,7 +473,7 @@ void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
 
     uint64_t time_usec;
     if (AP::rtc().get_utc_usec(time_usec)) {
-        gcs().send_text(MAV_SEVERITY_WARNING, "sendGPSDataMessage: Attempting to sent RTC Time");
+        gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: Attempting to sent RTC Time");
         // not completely accurate, our time includes leap seconds and time_t should be without
         const time_t time_sec = time_usec / 1000000;
         struct tm* tm = gmtime(&time_sec);
@@ -482,7 +481,7 @@ void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
         // format time string
         snprintf((char*)&gps.timeOfFix, 11, "%02u%02u%06.3f", tm->tm_hour, tm->tm_min, tm->tm_sec + (time_usec % 1000000) * 1.0e-6);
     } else {
-        gcs().send_text(MAV_SEVERITY_WARNING, "sendGPSDataMessage: No Data Received from RTC");
+        gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: No Data Received from RTC");
         strncpy(gps.timeOfFix, "      .   ", 11);
     }
 
