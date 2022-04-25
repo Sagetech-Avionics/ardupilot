@@ -120,7 +120,7 @@ static void checkGPSInputs(sg_gps_t *gps)
    {
       if (i == 6)
       {
-         assert(gps->timeOfFix[i] == 0x2E &&
+         assert((gps->timeOfFix[i] == 0x2E) &&
                 "A period is expected to signify the start of fractional seconds.");
       }
       else if (i == 0 && gps->timeOfFix[i] == 0x20)
