@@ -65,7 +65,7 @@ private:
     static const uint32_t PAYLOAD_MXS_MAX_SIZE  = 255;
     static const uint8_t  START_BYTE = 0xAA;
 
-    enum class MsgType {
+    enum class MsgType : uint8_t {
         Installation            = SG_MSG_TYPE_HOST_INSTALL,
         FlightID                = SG_MSG_TYPE_HOST_FLIGHT,
         Operating               = SG_MSG_TYPE_HOST_OPMSG,

@@ -248,7 +248,6 @@ void AP_ADSB_Sagetech_MXS::handle_svr(sg_svr_t svr)
         vehicle.info.flags |= ADSB_FLAGS_VERTICAL_VELOCITY_VALID;
     }
 
-    printf("RECEIVED SVR:\nLat: %d\tLon: %d\tGeoAlt: %d\tAirspeed: %d\tHeading: %d\tVrate: %d\n", vehicle.info.lat, vehicle.info.lon, vehicle.info.altitude, vehicle.info.hor_velocity, vehicle.info.heading, vehicle.info.ver_velocity);
     _frontend.handle_adsb_vehicle(vehicle);
 }
 
@@ -337,7 +336,6 @@ void AP_ADSB_Sagetech_MXS::send_install_msg()
 
     if (!strlen(_frontend.out_state.cfg.callsign)) 
     {
-        // FIXME: These strncpy throw warning because the callsign field from front end is 9 characters long, and the registration field is 8 characters long. Find way to fix this.
         // FIXME: The callsign field in frontend never gets populated so this is just a default fow now.
         snprintf(inst.reg, 8, "%-7s", "ABC123");
     } else {
@@ -489,7 +487,6 @@ void AP_ADSB_Sagetech_MXS::send_gps_msg()
         strncpy(gps.timeOfFix, "      .   ", 11);
     }
 
-    // FIXME: Add gps.height data
     int32_t height;
     if (_frontend._my_loc.initialised() && _frontend._my_loc.get_alt_cm(Location::AltFrame::ABOVE_TERRAIN, height))
     {
@@ -497,10 +494,6 @@ void AP_ADSB_Sagetech_MXS::send_gps_msg()
     } else {
         gps.height = 0.0;
     }
-
-    // FIXME: Remove Debug Printouts
-    // gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage:\nTimeOfFix: %s\nLongitude: %s\nLatitude: %s\ngrdSpeed: %s\ngrdTrack: %s\nAltitude: %0f m",gps.timeOfFix, gps.longitude, gps.latitude, gps.grdSpeed, gps.grdTrack, gps.height);
-
 
     // Encode GPS and Send It
     sgEncodeGPS(txComBuffer, &gps, msgId++);
