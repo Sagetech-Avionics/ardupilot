@@ -436,7 +436,7 @@ void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
 // Documented in header file
 void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
 {
-    gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: Sending GPS Data");
+    // gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: Sending GPS Data");
     sg_gps_t gps;
 
     // Populate the GPS object
@@ -466,6 +466,7 @@ void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
     float heading = wrap_360(degrees(speed.angle()));
     snprintf((char*)&gps.grdTrack, 9, "%03u.%04u", unsigned(heading), unsigned((heading - (int)heading) * 1.0E4));
 
+
     gps.latNorth = (latitude >= 0 ? true: false);
     gps.lngEast = (longitude >= 0 ? true: false);
 
@@ -473,7 +474,6 @@ void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
 
     uint64_t time_usec;
     if (AP::rtc().get_utc_usec(time_usec)) {
-        gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: Attempting to sent RTC Time");
         // not completely accurate, our time includes leap seconds and time_t should be without
         const time_t time_sec = time_usec / 1000000;
         struct tm* tm = gmtime(&time_sec);
@@ -481,12 +481,20 @@ void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
         // format time string
         snprintf((char*)&gps.timeOfFix, 11, "%02u%02u%06.3f", tm->tm_hour, tm->tm_min, tm->tm_sec + (time_usec % 1000000) * 1.0e-6);
     } else {
-        gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: No Data Received from RTC");
         strncpy(gps.timeOfFix, "      .   ", 11);
     }
 
     // FIXME: Add gps.height data
-    gps.height = (float) _frontend._my_loc.alt;
+    int32_t height;
+    if (_frontend._my_loc.initialised() && _frontend._my_loc.get_alt_cm(Location::AltFrame::ABOVE_TERRAIN, height))
+    {
+        gps.height = height / 100.0;   // 2: above origin
+    } else {
+        gps.height = 0.0;
+    }
+
+    gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage:\nTimeOfFix: %s\nLongitude: %s\nLatitude: %s\ngrdSpeed: %s\ngrdTrack: %s\nAltitude: %0f m",gps.timeOfFix, gps.longitude, gps.latitude, gps.grdSpeed, gps.grdTrack, gps.height);
+
 
     // Encode GPS and Send It
     sgEncodeGPS(txComBuffer, &gps, msgId++);
