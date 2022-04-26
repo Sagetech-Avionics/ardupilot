@@ -82,12 +82,12 @@ void AP_ADSB_Sagetech_MXS::update()
     // -----------------------------
     if (!last_packet_initialize_ms || (now_ms - last_packet_initialize_ms >= 5000)) {
         last_packet_initialize_ms = now_ms;
-        // send_packet(MsgType::Installation);
+        send_packet(MsgType::Installation);
 
     } else if (!last_packet_PreFlight_ms || (now_ms - last_packet_PreFlight_ms >= 8200)) {
         last_packet_PreFlight_ms = now_ms;
         // TODO: allow callsign to not require a reboot
-        // send_packet(MsgType::FlightID);
+        send_packet(MsgType::FlightID);
 
     } else if (now_ms - last_packet_Operating_ms >= 1000 && (
             last_packet_Operating_ms == 0 || // send once at boot
@@ -346,7 +346,17 @@ void AP_ADSB_Sagetech_MXS::sendInstallationMessage()
 {
     sg_install_t inst;
     inst.icao = _frontend.out_state.cfg.ICAO_id;
-    memcpy(&inst.reg, &_frontend.out_state.cfg.callsign, 8);    // FIXME: Is callsign same as registration? Callsign is 8 alphanumeric characters left justified and padded with spaces
+
+    if (!strlen(_frontend.out_state.cfg.callsign)) 
+    {
+        // FIXME: These strncpy throw warning because the callsign field from front end is 9 characters long, and the registration field is 8 characters long. Find way to fix this.
+        // FIXME: The callsign field in frontend never gets populated so this is just a default fow now.
+        snprintf(inst.reg, 8, "%-7s", "ABC123");
+    } else {
+        memcpy(inst.reg, _frontend.out_state.cfg.callsign, 8);
+        inst.reg[8] = '\0'; // Force ending null character
+    }
+
     inst.com0 = (sg_baud_t) baud57600;
     inst.com1 = (sg_baud_t) baud57600;
     
@@ -381,7 +391,15 @@ void AP_ADSB_Sagetech_MXS::sendFlightIdMessage()
 {
 
     sg_flightid_t flightId;
-    memcpy(&flightId.flightId, &_frontend.out_state.cfg.callsign, 9);       // Copy 9 character callsign
+
+    if (!strlen(_frontend.out_state.cfg.callsign))
+    {
+        // FIXME: Callsign field in frontend never gets populated so this is just a default for now.
+        snprintf(flightId.flightId, 9, "%-8s", "ABC123");
+    } else {
+        strncpy(flightId.flightId, _frontend.out_state.cfg.callsign, 9);       // Copy 9 character callsign
+    }
+
     sgEncodeFlightId(txComBuffer, &flightId, msgId++);
     msgWrite(txComBuffer, SG_MSG_LEN_FLIGHT);
 }
@@ -392,7 +410,6 @@ void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
     
     // Declare Operating Message Type
     sg_operating_t op;
-    gcs().send_text(MAV_SEVERITY_INFO, "sendOperatingMessage: Attempting to send operating message");
     // Populate operating message structure
     op.squawk = convert_base_to_decimal(8, last_operating_squawk);
     op.opMode = (sg_op_mode_t) modeOff;     // FIXME: Figure out how to update/get the OpMode
@@ -493,7 +510,8 @@ void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
         gps.height = 0.0;
     }
 
-    gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage:\nTimeOfFix: %s\nLongitude: %s\nLatitude: %s\ngrdSpeed: %s\ngrdTrack: %s\nAltitude: %0f m",gps.timeOfFix, gps.longitude, gps.latitude, gps.grdSpeed, gps.grdTrack, gps.height);
+    // FIXME: Remove Debug Printouts
+    // gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage:\nTimeOfFix: %s\nLongitude: %s\nLatitude: %s\ngrdSpeed: %s\ngrdTrack: %s\nAltitude: %0f m",gps.timeOfFix, gps.longitude, gps.latitude, gps.grdSpeed, gps.grdTrack, gps.height);
 
 
     // Encode GPS and Send It
