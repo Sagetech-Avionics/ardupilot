@@ -398,10 +398,7 @@ void AP_ADSB_Sagetech_MXS::send_operating_msg()
     sg_operating_t op;
     // Populate operating message structure
     op.squawk = convert_base_to_decimal(8, last_operating_squawk);
-    op.opMode = (sg_op_mode_t) modeOff;     // FIXME: Figure out how to update/get the OpMode
-                                            // Is this rfSelect/last_operating_rf_select?
-                                            // Use a data64/data16 type to allow us to send the Mode commands from mission control
-                                            // from the ground station (mavlink to sagetech)
+    op.opMode = (sg_op_mode_t) modeStby;    // Forcing into StandBy mode (accepts ADSB-in)
     op.savePowerUp = true;      // Save power-up state in non-volatile
     op.enableSqt = false;       // Enable extended squitters
     op.enableXBit = false;      // Enable the x-bit
