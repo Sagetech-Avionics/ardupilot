@@ -70,10 +70,7 @@ void AP_ADSB_Sagetech_MXS::update()
             break;
         }
         parse_byte((uint8_t)data);
-        // if (parse_byte((uint8_t)data)) {        // CF: The way that it works right now it auto calls handle packet in parse_byte, so is this needed?
-        //     handle_packet(message_in.packet);
-        // }
-    } // while nbytes
+    }
 
 
     const uint32_t now_ms = AP_HAL::millis();
