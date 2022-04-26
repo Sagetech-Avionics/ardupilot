@@ -65,13 +65,15 @@ void AP_ADSB_Sagetech_MXS::update()
     // -----------------------------
     uint32_t nbytes = MIN(_port->available(), 10 * PAYLOAD_MXS_MAX_SIZE);
     while (nbytes-- > 0) {
+        gcs().send_text(MAV_SEVERITY_INFO, "update: nbytes = %d", nbytes);
         const int16_t data = (uint8_t)_port->read();
         if (data < 0) {
             break;
         }
-        if (parse_byte((uint8_t)data)) {        // CF: The way that it works right now it auto calls handle packet in parse_byte, so is this needed?
-            handle_packet(message_in.packet);
-        }
+        parse_byte((uint8_t)data);
+        // if (parse_byte((uint8_t)data)) {        // CF: The way that it works right now it auto calls handle packet in parse_byte, so is this needed?
+        //     handle_packet(message_in.packet);
+        // }
     } // while nbytes
 
 
@@ -114,16 +116,16 @@ void AP_ADSB_Sagetech_MXS::send_packet(const MsgType type)
 {
     switch (type) {
     case MsgType::Installation:
-        sendInstallationMessage();
+        send_install_msg();
         break;
     case MsgType::FlightID:
-        sendFlightIdMessage();
+        send_flight_id_msg();
         break;
     case MsgType::Operating:
-        sendOperatingMessage();
+        send_operating_msg();
         break;
     case MsgType::GPS_Data:
-        sendGpsDataMessage();
+        send_gps_msg();
         break;
     default:
         break;
@@ -131,12 +133,12 @@ void AP_ADSB_Sagetech_MXS::send_packet(const MsgType type)
 }
 
 // Documented in header file
-void AP_ADSB_Sagetech_MXS::sendDataReq(sg_datatype_t dataReqType)
+void AP_ADSB_Sagetech_MXS::send_data_req(sg_datatype_t dataReqType)
 {
     sg_datareq_t dataReq;
     dataReq.reqType = dataReqType;
     sgEncodeDataReq(txComBuffer, &dataReq, msgId++);
-    msgWrite(txComBuffer, SG_MSG_LEN_DATAREQ);
+    msg_write(txComBuffer, SG_MSG_LEN_DATAREQ);
 }
 
 // Documented in header file
@@ -150,13 +152,6 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
         {
             // TODO: Handle ACK
         }
-        // {    // FIXME: have I replaced this appropriately?
-        //     Packet ack_msg {};
-        //     memcpy(&ack_msg, msg.payload, msg.payload_length); 
-        //     if (ack_msg.type != MsgType::ACK) { // sanity check so we don't cause endless recursion
-        //         handle_packet(ack_msg);
-        //     }
-        // }
         break;
 
     case MsgType::Data_Request:
@@ -202,18 +197,16 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
         break;
 
     // ADSB Messages
-    case MsgType::TISB_StateVector_Report:
     case MsgType::ADSB_StateVector_Report:
         sg_svr_t svr;
         if (sgDecodeSVR((uint8_t*) &msg, &svr)) {
-            handleSVR(svr);
+            handle_svr(svr);
         }
         break;
-    case MsgType::TISB_ModeStatus_Report:
     case MsgType::ADSB_ModeStatus_Report:
         sg_msr_t msr;
         if (sgDecodeMSR((uint8_t*) &msg, &msr)) {
-            handleMSR(msr);
+            handle_msr(msr);
         }
         break;
     case MsgType::Mode_Settings:                // Do we handle this?
@@ -221,8 +214,6 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
     case MsgType::RESERVED_0x84:
     case MsgType::RESERVED_0x85:
     case MsgType::RESERVED_0x8D:
-    case MsgType::TISB_CorasePos_Report:
-    case MsgType::TISB_ADSB_Mgr_Report:
     case MsgType::ADSB_Target_State_Report:
     case MsgType::ADSB_Air_Ref_Vel_Report:
         // handle_adsb_in_msg(msg);
@@ -232,7 +223,7 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
 }
 
 // Documented in header file
-void AP_ADSB_Sagetech_MXS::handleSVR(sg_svr_t svr)
+void AP_ADSB_Sagetech_MXS::handle_svr(sg_svr_t svr)
 {
     AP_ADSB::adsb_vehicle_t vehicle {};
     vehicle.last_update_ms = AP_HAL::millis();
@@ -265,7 +256,7 @@ void AP_ADSB_Sagetech_MXS::handleSVR(sg_svr_t svr)
 }
 
 // Documented in header file
-void AP_ADSB_Sagetech_MXS::handleMSR(sg_msr_t msr)
+void AP_ADSB_Sagetech_MXS::handle_msr(sg_msr_t msr)
 {
     AP_ADSB::adsb_vehicle_t vehicle {};
     vehicle.last_update_ms = AP_HAL::millis();
@@ -282,28 +273,33 @@ void AP_ADSB_Sagetech_MXS::handleMSR(sg_msr_t msr)
 // Documented in header file
 bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
 {
+    // gcs().send_text(MAV_SEVERITY_CRITICAL, "parse_byte: Got byte: %02x", data);
     switch (message_in.state) {
         default:
         case ParseState::WaitingFor_Start: {
             if (data == START_BYTE) {
+                printf("\n\nMessage Start: %02x", data);
                 message_in.checksum = data; // initialize checksum here
                 message_in.state = ParseState::WaitingFor_MsgType;
             }
             break;
         }
         case ParseState::WaitingFor_MsgType: {
+            printf("\nMessage Type: %02x", data);
             message_in.checksum += data;
             message_in.packet.type = static_cast<MsgType>(data);
             message_in.state = ParseState::WaitingFor_MsgId;
             break;
         }
         case ParseState::WaitingFor_MsgId: {
+            printf("\nMessage ID: %02x", data);
             message_in.checksum += data;
             message_in.packet.id = data;
             message_in.state = ParseState::WaitingFor_PayloadLen;
             break;
         }
         case ParseState::WaitingFor_PayloadLen: {
+            printf("\nPayload Length: %02x", data);
             message_in.checksum += data;
             message_in.packet.payload_length = data;
             message_in.index = 0;
@@ -311,6 +307,7 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
             break;
         }
         case ParseState::WaitingFor_PayloadContents: {
+            printf("\nPayload Byte: %02x", data);
             message_in.checksum += data; // initialize checksum here
             message_in.packet.payload[message_in.index++] = data;
             if (message_in.index >= message_in.packet.payload_length) {
@@ -319,12 +316,16 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
             break;
         }
         case ParseState::WaitingFor_Checksum: {
+            printf("\nChecksum: %02x", data);
             message_in.state = ParseState::WaitingFor_Start;
+            printf("\nExpected Checksum: %02x", message_in.checksum);
             if (message_in.checksum == data) {
                 // append the checksum to the payload and zero out the payload index
                 message_in.packet.payload[message_in.index] = data;
                 message_in.index = 0;
                 // message_in.packet.checksum = data;       // Doing it this way would put it after the max payload length.
+                printf("\nparse_byte: Got a packet\n");
+                // gcs().send_text(MAV_SEVERITY_INFO, "parse_byte: Got a packet");
                 handle_packet(message_in.packet);
             }
             break;
@@ -334,7 +335,7 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
 }
 
 // Documented in header file
-void AP_ADSB_Sagetech_MXS::msgWrite(uint8_t *data, uint16_t len)
+void AP_ADSB_Sagetech_MXS::msg_write(uint8_t *data, uint16_t len)
 {
     if (_port != nullptr) {
         _port->write(data, len);
@@ -342,7 +343,7 @@ void AP_ADSB_Sagetech_MXS::msgWrite(uint8_t *data, uint16_t len)
 }
 
 // Documented in header file
-void AP_ADSB_Sagetech_MXS::sendInstallationMessage()
+void AP_ADSB_Sagetech_MXS::send_install_msg()
 {
     sg_install_t inst;
     inst.icao = _frontend.out_state.cfg.ICAO_id;
@@ -383,11 +384,11 @@ void AP_ADSB_Sagetech_MXS::sendInstallationMessage()
     inst.wowConnected = true;
 
     sgEncodeInstall(txComBuffer, &inst, msgId++);
-    msgWrite(txComBuffer, SG_MSG_LEN_INSTALL);
+    msg_write(txComBuffer, SG_MSG_LEN_INSTALL);
 }
 
 // Documented in header file
-void AP_ADSB_Sagetech_MXS::sendFlightIdMessage()
+void AP_ADSB_Sagetech_MXS::send_flight_id_msg()
 {
 
     sg_flightid_t flightId;
@@ -401,11 +402,11 @@ void AP_ADSB_Sagetech_MXS::sendFlightIdMessage()
     }
 
     sgEncodeFlightId(txComBuffer, &flightId, msgId++);
-    msgWrite(txComBuffer, SG_MSG_LEN_FLIGHT);
+    msg_write(txComBuffer, SG_MSG_LEN_FLIGHT);
 }
 
 // Documented in header file
-void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
+void AP_ADSB_Sagetech_MXS::send_operating_msg()
 {
     
     // Declare Operating Message Type
@@ -447,11 +448,11 @@ void AP_ADSB_Sagetech_MXS::sendOperatingMessage()
 
     // Encode the operating message object
     sgEncodeOperating(txComBuffer, &op, msgId++);
-    msgWrite(txComBuffer, SG_MSG_LEN_OPMSG);
+    msg_write(txComBuffer, SG_MSG_LEN_OPMSG);
 }
 
 // Documented in header file
-void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
+void AP_ADSB_Sagetech_MXS::send_gps_msg()
 {
     // gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: Sending GPS Data");
     sg_gps_t gps;
@@ -516,7 +517,7 @@ void AP_ADSB_Sagetech_MXS::sendGpsDataMessage()
 
     // Encode GPS and Send It
     sgEncodeGPS(txComBuffer, &gps, msgId++);
-    msgWrite(txComBuffer, sizeof(sg_gps_t));
+    msg_write(txComBuffer, sizeof(sg_gps_t));
 }
 
 // Documented in header file

@@ -90,13 +90,6 @@ private:
 
         ADSB_StateVector_Report = SG_MSG_TYPE_ADSB_SVR,
         ADSB_ModeStatus_Report  = SG_MSG_TYPE_ADSB_MSR,
-
-        // TISB No longer supported by MXS.
-        TISB_StateVector_Report = 0x93,
-        TISB_ModeStatus_Report  = 0x94,
-        TISB_CorasePos_Report   = 0x95,
-        TISB_ADSB_Mgr_Report    = 0x96,
-
         ADSB_Target_State_Report= SG_MSG_TYPE_ADSB_TSTATE,
         ADSB_Air_Ref_Vel_Report = SG_MSG_TYPE_ADSB_ARVR,
     };
@@ -108,28 +101,6 @@ private:
         WaitingFor_PayloadLen,
         WaitingFor_PayloadContents,
         WaitingFor_Checksum,
-    };
-
-    enum class emit_T {
-        aUnknown       = 0x00,
-        aLight,
-        aSmall,
-        aLarge,
-        aHighVortex,
-        aHeavy,
-        aPerformance,
-        aRotorCraft,
-        bUnknown,
-        bGlider,
-        bAir,
-        bParachutist,
-        bUltralight,
-        bUAV,
-        bSpace,
-        cUnknown,
-        cEmergency,
-        cService,
-        cPoint
     };
 
     struct __attribute__((packed)) Packet {
@@ -161,7 +132,7 @@ private:
      * 
      * @param dataReqType 
      */
-    void sendDataReq(sg_datatype_t dataReqType);
+    void send_data_req(sg_datatype_t dataReqType);
 
     /**
      * @brief Takes incoming packets, gets their message type, and 
@@ -176,14 +147,14 @@ private:
      * 
      * @param svr 
      */
-    void handleSVR(sg_svr_t svr);
+    void handle_svr(sg_svr_t svr);
 
     /**
      * @brief Hande a received ADSB mode status report and updates the vehicle list
      * 
      * @param msr Sagetech SDK Mode Status Report type
      */
-    void handleMSR(sg_msr_t msr);
+    void handle_msr(sg_msr_t msr);
 
 
     /**
@@ -201,32 +172,32 @@ private:
      * @param data : pointer to data buffer
      * @param len : number of bytes to write
      */
-    void msgWrite(uint8_t *data, uint16_t len);
+    void msg_write(uint8_t *data, uint16_t len);
 
 
     /**
      * @brief Callback for sending an installation message.
      * 
      */
-    void sendInstallationMessage();
+    void send_install_msg();
 
     /**
      * @brief Callback for sending a FlightID message
      * 
      */
-    void sendFlightIdMessage();
+    void send_flight_id_msg();
 
     /**
      * @brief Callback for sending an operating message.
      * 
      */
-    void sendOperatingMessage();
+    void send_operating_msg();
 
     /**
      * @brief Callback for sending a GPS data message
      * 
      */
-    void sendGpsDataMessage();
+    void send_gps_msg();
 
     /**
     * @brief Convert base 8 or 16 to decimal. Used to convert an octal/hexadecimal value stored on a GCS as a string field in different format, but then transmitted over mavlink as a float which is always a decimal.
