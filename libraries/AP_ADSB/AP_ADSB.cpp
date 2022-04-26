@@ -277,18 +277,12 @@ void AP_ADSB::detect_instance(uint8_t instance)
 
     case Type::Sagetech:
 #if HAL_ADSB_SAGETECH_ENABLED
-        // gcs().send_text(MAV_SEVERITY_WARNING, "ADSB: Checking for Sagetech.");
-        // if (AP_ADSB_Sagetech::detect()) {
-        //     _backend[instance] = new AP_ADSB_Sagetech(*this, instance);
-        //     return;
-        // }
-        if (AP_ADSB_Sagetech_MXS::detect()) {
-            _backend[instance] = new AP_ADSB_Sagetech_MXS(*this, instance);
+        if (AP_ADSB_Sagetech::detect()) {
+            _backend[instance] = new AP_ADSB_Sagetech(*this, instance);
             return;
         }
 #endif
         break;
-
     case Type::Sagetech_MXS:
 #if HAL_ADSB_SAGETECH_MXS_ENABLED
         if (AP_ADSB_Sagetech_MXS::detect()) {

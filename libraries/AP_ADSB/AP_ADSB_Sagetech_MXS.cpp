@@ -65,7 +65,6 @@ void AP_ADSB_Sagetech_MXS::update()
     // -----------------------------
     uint32_t nbytes = MIN(_port->available(), 10 * PAYLOAD_MXS_MAX_SIZE);
     while (nbytes-- > 0) {
-        gcs().send_text(MAV_SEVERITY_INFO, "update: nbytes = %d", nbytes);
         const int16_t data = (uint8_t)_port->read();
         if (data < 0) {
             break;
@@ -252,6 +251,7 @@ void AP_ADSB_Sagetech_MXS::handle_svr(sg_svr_t svr)
         vehicle.info.flags |= ADSB_FLAGS_VERTICAL_VELOCITY_VALID;
     }
 
+    printf("RECEIVED SVR:\nLat: %d\tLon: %d\tGeoAlt: %d\tAirspeed: %d\tHeading: %d\tVrate: %d\n", vehicle.info.lat, vehicle.info.lon, vehicle.info.altitude, vehicle.info.hor_velocity, vehicle.info.heading, vehicle.info.ver_velocity);
     _frontend.handle_adsb_vehicle(vehicle);
 }
 
@@ -278,28 +278,24 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
         default:
         case ParseState::WaitingFor_Start: {
             if (data == START_BYTE) {
-                printf("\n\nMessage Start: %02x", data);
                 message_in.checksum = data; // initialize checksum here
                 message_in.state = ParseState::WaitingFor_MsgType;
             }
             break;
         }
         case ParseState::WaitingFor_MsgType: {
-            printf("\nMessage Type: %02x", data);
             message_in.checksum += data;
             message_in.packet.type = static_cast<MsgType>(data);
             message_in.state = ParseState::WaitingFor_MsgId;
             break;
         }
         case ParseState::WaitingFor_MsgId: {
-            printf("\nMessage ID: %02x", data);
             message_in.checksum += data;
             message_in.packet.id = data;
             message_in.state = ParseState::WaitingFor_PayloadLen;
             break;
         }
         case ParseState::WaitingFor_PayloadLen: {
-            printf("\nPayload Length: %02x", data);
             message_in.checksum += data;
             message_in.packet.payload_length = data;
             message_in.index = 0;
@@ -307,7 +303,6 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
             break;
         }
         case ParseState::WaitingFor_PayloadContents: {
-            printf("\nPayload Byte: %02x", data);
             message_in.checksum += data; // initialize checksum here
             message_in.packet.payload[message_in.index++] = data;
             if (message_in.index >= message_in.packet.payload_length) {
@@ -316,16 +311,11 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
             break;
         }
         case ParseState::WaitingFor_Checksum: {
-            printf("\nChecksum: %02x", data);
             message_in.state = ParseState::WaitingFor_Start;
-            printf("\nExpected Checksum: %02x", message_in.checksum);
             if (message_in.checksum == data) {
                 // append the checksum to the payload and zero out the payload index
                 message_in.packet.payload[message_in.index] = data;
                 message_in.index = 0;
-                // message_in.packet.checksum = data;       // Doing it this way would put it after the max payload length.
-                printf("\nparse_byte: Got a packet\n");
-                // gcs().send_text(MAV_SEVERITY_INFO, "parse_byte: Got a packet");
                 handle_packet(message_in.packet);
             }
             break;

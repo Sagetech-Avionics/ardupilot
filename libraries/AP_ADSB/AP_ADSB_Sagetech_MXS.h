@@ -20,7 +20,7 @@
 #pragma once
 
 #include "AP_ADSB_Backend.h"
-#include <AP_ADSB/sagetech-sdk/sagetech_mxs.h>
+#include "sagetech-sdk/sagetech_mxs.h"
 
 #ifndef HAL_ADSB_SAGETECH_MXS_ENABLED
 #define HAL_ADSB_SAGETECH_MXS_ENABLED HAL_ADSB_ENABLED
