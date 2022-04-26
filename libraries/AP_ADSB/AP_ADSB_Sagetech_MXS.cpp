@@ -1,5 +1,5 @@
 /*
-   Copyright (C) 2022 Kraus Hamdani Aerospace Inc. All rights reserved.
+   Copyright (C) 2022 Sagetech Avionics Inc. All rights reserved.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,7 +14,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-   Author: Tom Pittenger
+   Author: Tom Pittenger, Chuck Faber
  */
 
 
@@ -39,21 +39,18 @@
 static uint8_t txComBuffer[ADSB_COM_TX_BUFFER_LEN];
 static uint8_t msgId = 0;
 
-// Documented in header file
 bool AP_ADSB_Sagetech_MXS::detect()
 {
     return AP::serialmanager().have_serial(AP_SerialManager::SerialProtocol_ADSB, 0);
 }
 
 
-// Documented in header file
 bool AP_ADSB_Sagetech_MXS::init()
 {
     _port = AP::serialmanager().find_serial(AP_SerialManager::SerialProtocol_ADSB, 0);
     return (_port != nullptr);
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::update()
 {
     if (_port == nullptr) {
@@ -107,7 +104,6 @@ void AP_ADSB_Sagetech_MXS::update()
     }
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::send_packet(const MsgType type)
 {
     switch (type) {
@@ -128,7 +124,6 @@ void AP_ADSB_Sagetech_MXS::send_packet(const MsgType type)
     }
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::send_data_req(sg_datatype_t dataReqType)
 {
     sg_datareq_t dataReq;
@@ -137,7 +132,6 @@ void AP_ADSB_Sagetech_MXS::send_data_req(sg_datatype_t dataReqType)
     msg_write(txComBuffer, SG_MSG_LEN_DATAREQ);
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
 {
     // TODO: Populate with correct callbacks to handle incoming messages
@@ -218,7 +212,6 @@ void AP_ADSB_Sagetech_MXS::handle_packet(const Packet &msg)
     }
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::handle_svr(sg_svr_t svr)
 {
     AP_ADSB::adsb_vehicle_t vehicle {};
@@ -266,7 +259,6 @@ void AP_ADSB_Sagetech_MXS::handle_msr(sg_msr_t msr)
     _frontend.handle_adsb_vehicle(vehicle);
 }
 
-// Documented in header file
 bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
 {
     // gcs().send_text(MAV_SEVERITY_CRITICAL, "parse_byte: Got byte: %02x", data);
@@ -320,7 +312,6 @@ bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
     return false;
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::msg_write(uint8_t *data, uint16_t len)
 {
     if (_port != nullptr) {
@@ -328,7 +319,6 @@ void AP_ADSB_Sagetech_MXS::msg_write(uint8_t *data, uint16_t len)
     }
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::send_install_msg()
 {
     sg_install_t inst;
@@ -372,7 +362,6 @@ void AP_ADSB_Sagetech_MXS::send_install_msg()
     msg_write(txComBuffer, SG_MSG_LEN_INSTALL);
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::send_flight_id_msg()
 {
 
@@ -390,13 +379,10 @@ void AP_ADSB_Sagetech_MXS::send_flight_id_msg()
     msg_write(txComBuffer, SG_MSG_LEN_FLIGHT);
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::send_operating_msg()
 {
     
-    // Declare Operating Message Type
     sg_operating_t op;
-    // Populate operating message structure
     op.squawk = convert_base_to_decimal(8, last_operating_squawk);
     op.opMode = (sg_op_mode_t) modeStby;    // Forcing into StandBy mode (accepts ADSB-in)
     op.savePowerUp = true;      // Save power-up state in non-volatile
@@ -433,7 +419,6 @@ void AP_ADSB_Sagetech_MXS::send_operating_msg()
     msg_write(txComBuffer, SG_MSG_LEN_OPMSG);
 }
 
-// Documented in header file
 void AP_ADSB_Sagetech_MXS::send_gps_msg()
 {
     // gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: Sending GPS Data");
@@ -497,7 +482,6 @@ void AP_ADSB_Sagetech_MXS::send_gps_msg()
     msg_write(txComBuffer, sizeof(sg_gps_t));
 }
 
-// Documented in header file
 uint32_t AP_ADSB_Sagetech_MXS::convert_base_to_decimal(const uint8_t baseIn, uint32_t inputNumber)
 {
     // Our only sensible input bases are 16 and 8
@@ -513,7 +497,6 @@ uint32_t AP_ADSB_Sagetech_MXS::convert_base_to_decimal(const uint8_t baseIn, uin
     return outputNumber;
 }
 
-// Documented in header file
 sg_emitter_t AP_ADSB_Sagetech_MXS::convert_to_sg_emitter_type(AP_Int8 emitterType)
 {
     if (emitterType < 8) {
@@ -529,7 +512,6 @@ sg_emitter_t AP_ADSB_Sagetech_MXS::convert_to_sg_emitter_type(AP_Int8 emitterTyp
     }
 }
 
-// Documented in header file
 sg_airspeed_t AP_ADSB_Sagetech_MXS::convert_to_sg_airspeed_type(float maxAirSpeed)
 {
     int airspeed = (int) maxAirSpeed;
