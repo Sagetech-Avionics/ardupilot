@@ -32,6 +32,7 @@
 
 #define ADSB_COM_TX_BUFFER_LEN 128
 
+#define SAGETECH_SCALE_CM_TO_FEET (0.0328084f)
 #define SAGETECH_SCALE_FEET_TO_MM (304.8f)
 #define SAGETECH_SCALE_KNOTS_TO_CM_PER_SEC (51.4444f)
 #define SAGETECH_SCALE_FT_PER_MIN_TO_CM_PER_SEC (0.508f)
@@ -261,7 +262,6 @@ void AP_ADSB_Sagetech_MXS::handle_msr(sg_msr_t msr)
 
 bool AP_ADSB_Sagetech_MXS::parse_byte(const uint8_t data)
 {
-    // gcs().send_text(MAV_SEVERITY_CRITICAL, "parse_byte: Got byte: %02x", data);
     switch (message_in.state) {
         default:
         case ParseState::WaitingFor_Start: {
@@ -384,23 +384,29 @@ void AP_ADSB_Sagetech_MXS::send_operating_msg()
     
     sg_operating_t op;
     op.squawk = convert_base_to_decimal(8, last_operating_squawk);
+    // FIXME: How do we get this data to send?
     op.opMode = (sg_op_mode_t) modeStby;    // Forcing into StandBy mode (accepts ADSB-in)
     op.savePowerUp = true;      // Save power-up state in non-volatile
     op.enableSqt = false;       // Enable extended squitters
     op.enableXBit = false;      // Enable the x-bit
     op.milEmergency = false;    // Broadcast a military emergency
     op.emergcType = (sg_emergc_t) emergcNone; // Enumerated civilian emergency type
-
     op.altUseIntrnl = true;     // True = Report altitude from internal pressure sensor
                                 // (will ignore other bits in the field)
     // we are using internal, so these don't need to be set
     op.altHostAvlbl = false;    // Host Altitude is being provided
     op.altRes25 = false;        // Host Altitude Resolution from install
-    op.altitude = 0;            // Sea-level altitude in feet. Field is ignored when internal altitude is selected
 
+    // FIXME: Need to get this data from frontend
+    int32_t height;
+    if (_frontend._my_loc.initialised() && _frontend._my_loc.get_alt_cm(Location::AltFrame::ABSOLUTE, height))
+    {
+        op.altitude = (int32_t) height * SAGETECH_SCALE_CM_TO_FEET;   // Height above sealevel in feet
+    } else {
+        op.altitude = 0;
+    }
     op.climbValid = false;      // Climb rate is provided (LUA script AHRS does not provide climb rate)
     op.climbRate = 0;           // Climb rate in ft/min. Limits are +/- 16,448 ft/min.
-    
     op.headingValid = false;
     op.airspdValid = false;
     const Vector2f speed = AP::ahrs().groundspeed_vector();
@@ -421,7 +427,6 @@ void AP_ADSB_Sagetech_MXS::send_operating_msg()
 
 void AP_ADSB_Sagetech_MXS::send_gps_msg()
 {
-    // gcs().send_text(MAV_SEVERITY_INFO, "sendGPSDataMessage: Sending GPS Data");
     sg_gps_t gps;
 
     // Populate the GPS object
