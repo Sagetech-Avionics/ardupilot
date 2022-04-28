@@ -333,7 +333,7 @@ void AP_ADSB_Sagetech_MXS::send_install_msg()
         snprintf(inst.reg, 8, "%-7s", "ABC123");
     } else {
         memcpy(inst.reg, _frontend.out_state.cfg.callsign, 8);
-        inst.reg[8] = '\0'; // Force ending null character
+        inst.reg[7] = '\0'; // Force ending null character
     }
 
     inst.com0 = (sg_baud_t) baud57600;
