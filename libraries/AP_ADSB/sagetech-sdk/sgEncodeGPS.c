@@ -19,6 +19,7 @@
 #include "sgUtil.h"
 
 #define SG_PAYLOAD_LEN_GPS  SG_MSG_LEN_GPS - 5  /// the payload length.
+#define _UNUSED(x) ((void)(x))
 
 #define PBASE                    4   /// the payload offset.
 #define OFFSET_LONGITUDE         0   /// the longitude offset in the payload.
@@ -98,6 +99,7 @@ static void checkGPSInputs(sg_gps_t *gps)
    }
    assert(spdDecimal == true &&
           "Use a period in ground speed to signify the start of fractional knots.");
+    _UNUSED(spdDecimal);
 
    // Validate ground track
    for (int i = 0; i < LEN_TRK; ++i)
