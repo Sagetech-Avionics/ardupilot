@@ -76,8 +76,11 @@ void AP_ADSB_Sagetech_MXS::update()
     // -----------------------------
     // handle timers for generating data
     // -----------------------------
-    if (!last_packet_initialize_ms || (now_ms - last_packet_initialize_ms >= 5000)) {
+    if (!last_packet_initialize_ms || ((now_ms - last_packet_initialize_ms >= 5000) && (
+            last_icao_id != _frontend.out_state.cfg.ICAO_id))) 
+    {
         last_packet_initialize_ms = now_ms;
+        last_icao_id = _frontend.out_state.cfg.ICAO_id;
         send_packet(MsgType::Installation);
 
     } else if (!last_packet_PreFlight_ms || (now_ms - last_packet_PreFlight_ms >= 8200)) {
@@ -241,7 +244,7 @@ void AP_ADSB_Sagetech_MXS::handle_svr(sg_svr_t svr)
         vehicle.info.ver_velocity = svr.airborne.vrate * SAGETECH_SCALE_FT_PER_MIN_TO_CM_PER_SEC; // Convert from ft/min to cm/s
         vehicle.info.flags |= ADSB_FLAGS_VERTICAL_VELOCITY_VALID;
     }
-
+    gcs().send_text(MAV_SEVERITY_INFO, "handle_svr: Received SVR.");
     _frontend.handle_adsb_vehicle(vehicle);
 }
 
@@ -256,7 +259,7 @@ void AP_ADSB_Sagetech_MXS::handle_msr(sg_msr_t msr)
     if (msr.callsign[0] != 0) {
         memcpy(&vehicle.info.callsign, &msr.callsign, 8);
     }
-
+    gcs().send_text(MAV_SEVERITY_INFO, "handle_msr: Received MSR.");
     _frontend.handle_adsb_vehicle(vehicle);
 }
 

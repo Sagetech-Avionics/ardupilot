@@ -235,6 +235,7 @@ private:
     uint16_t        last_operating_squawk;
     int32_t         last_operating_alt;
     uint8_t         last_operating_rf_select;
+    int32_t         last_icao_id;
 
     // track status changes in acks
     uint8_t         last_ack_transponder_mode;
